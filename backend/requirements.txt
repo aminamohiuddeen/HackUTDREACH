@@ -1,7 +1,7 @@
-﻿fastapi
+fastapi
 uvicorn[standard]
-sqlalchemy
-pydantic
+sqlalchemy>=2.0
+pydantic>=2.0
 python-dotenv
 openai
 httpx
