@@ -1,3 +1,5 @@
+import os
+
 import config
 import simulator
 from agents.classifier import classify_case
@@ -27,9 +29,10 @@ def test_docs_and_openapi_load(client):
 
 
 def test_cors_allows_frontend_origin(client):
+    origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173").split(",")[0].strip()
     r = client.options("/api/cases", headers={
-        "Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"})
-    assert r.headers.get("access-control-allow-origin") == "http://localhost:5173"
+        "Origin": origin, "Access-Control-Request-Method": "GET"})
+    assert r.headers.get("access-control-allow-origin") == origin
 
 
 # --- telemetry ---------------------------------------------------------------
