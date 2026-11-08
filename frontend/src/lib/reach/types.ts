@@ -18,6 +18,8 @@ export interface Vec3 {
 export type Zone = "residential" | "industrial" | "road" | "unknown";
 export type LocationSource = "gps" | "operator";
 export type ConnectionStatus = "online" | "degraded" | "offline";
+/** Where a case's data came from: the backend simulator or a physical rescue pod. */
+export type DataSource = "simulator" | "hardware";
 
 export interface QuestionAnswer {
   questionId: number;
@@ -63,13 +65,15 @@ export interface Confidence {
   /** Never a fabricated number. */
   label: "Not calibrated" | "Unknown";
   evidence: string[];
+  /** Backend classifier confidence, 0–1, when the backend supplies one. Never fabricated. */
+  score?: number | null | undefined;
 }
 
 export type UnitType = "EMS" | "FIRE" | "SAR";
 export interface ResponseUnit {
   id: string;
   type: UnitType;
-  distanceKm: number;
+  distanceMi: number;
   availability?: string | undefined; // only shown if the backend supplies it
 }
 
@@ -103,6 +107,8 @@ export type ScenarioKey = "object_cleared" | "survivor_ranked" | "verify_residen
 export interface RescueCase {
   id: string;
   scenario?: ScenarioKey | undefined;
+  /** Set for live backend cases; absent for demo seed data. */
+  source?: DataSource | undefined;
   detectedAt: string;
   robotId: string;
   sectorId: string;

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ChevronRight, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useReach } from "@/lib/reach/store";
+import { useCaseDetail, useReach } from "@/lib/reach/store";
 import { needsResponse } from "@/lib/reach/priority";
 import { fmtCoord } from "@/lib/reach/format";
 import { EmptyState, EnvWarning, PageHeader, Panel, PanelHeader, ScoreBadge, StatusBadge } from "@/components/reach/primitives";
@@ -26,6 +26,7 @@ export const Route = createFileRoute("/_authenticated/respond")({
 function Respond() {
   const { cases } = useReach();
   const { id } = Route.useSearch();
+  useCaseDetail(id);
   const navigate = useNavigate({ from: "/respond" });
   const list = needsResponse(cases);
   // Look up across all cases so the detail view stays open after the case is closed.

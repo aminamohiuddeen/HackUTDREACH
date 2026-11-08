@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, ChevronRight, HeartPulse } from "lucide-react";
-import { useReach } from "@/lib/reach/store";
+import { useCaseDetail, useReach } from "@/lib/reach/store";
 import { hasValidSurvey } from "@/lib/reach/classify";
 import { fmtTime } from "@/lib/reach/format";
 import { EmptyState, PageHeader, Panel, PanelHeader, ScoreBadge } from "@/components/reach/primitives";
@@ -24,6 +24,7 @@ export const Route = createFileRoute("/_authenticated/survivors")({
 function Survivors() {
   const { cases } = useReach();
   const { id } = Route.useSearch();
+  useCaseDetail(id);
   const navigate = useNavigate({ from: "/survivors" });
   const list = cases.filter((c) => c.classification === "likely_person" && hasValidSurvey(c.questionnaire));
   // Look up across all cases so the detail view stays open after the case is closed.

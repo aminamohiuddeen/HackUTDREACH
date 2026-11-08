@@ -17,7 +17,8 @@ type Action =
   | { type: "dispatch_unit"; caseId: string; unitId: string }
   | { type: "resolve"; caseId: string }
   | { type: "report"; caseId: string; report: NemotronReport }
-  | { type: "load"; cases: RescueCase[] };
+  | { type: "load"; cases: RescueCase[] }
+  | { type: "update_case_details"; caseId: string; details: Partial<RescueCase> };
 
 const OUTCOME_TITLE: Record<Exclude<VerificationOutcome, "pending">, string> = {
   needs_verification: "Operator: still needs verification",
@@ -137,6 +138,12 @@ function reducer(state: State, a: Action): State {
     case "load":
       // Replace cases wholesale with live backend data; sectors/robots are left as-is.
       return { ...state, cases: a.cases };
+    case "update_case_details":
+      // Merge detail-only fields (sensors, questionnaire, …) fetched from GET /api/cases/{id}.
+      return {
+        ...state,
+        cases: state.cases.map((c) => (c.id === a.caseId ? { ...c, ...a.details } : c)),
+      };
   }
 }
 
@@ -158,6 +165,18 @@ export function ReachProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     reachApi
       .getCases()
+      // GET /api/cases omits telemetry/surveys; fetch each case's detail in parallel so the
+      // dashboard, survivor list and case list are populated. A failed detail falls back to the summary.
+      .then((cases) =>
+        Promise.all(
+          cases.map((c) =>
+            reachApi
+              .getCaseDetail(c.id)
+              .then((details) => ({ ...c, ...details }))
+              .catch(() => c),
+          ),
+        ),
+      )
       .then((cases) => {
         if (!cancelled) dispatch({ type: "load", cases });
       })
@@ -170,6 +189,29 @@ export function ReachProvider({ children }: { children: ReactNode }) {
   }, []);
   const value = useMemo(() => ({ ...state, dispatch }), [state]);
   return <ReachContext.Provider value={value}>{children}</ReachContext.Provider>;
+}
+
+/**
+ * Loads the full case detail (sensors, questionnaire) when a case is opened.
+ * No-op in DEMO_MODE, where mock cases already include these fields.
+ */
+export function useCaseDetail(caseId: string | undefined) {
+  const { dispatch } = useReach();
+  useEffect(() => {
+    if (!caseId || DEMO_MODE) return;
+    let cancelled = false;
+    reachApi
+      .getCaseDetail(caseId)
+      .then((details) => {
+        if (!cancelled && Object.keys(details).length) dispatch({ type: "update_case_details", caseId, details });
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) toast.error("Could not load case details", { description: e instanceof Error ? e.message : String(e) });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, dispatch]);
 }
 
 export function useReach() {

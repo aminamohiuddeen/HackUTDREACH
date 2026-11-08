@@ -161,14 +161,14 @@ const seeds: Seed[] = [
       tools: [
         { at: t("21:48:40"), tool: "classify_detection", summary: "Rules → likely_person / ranked", status: "ok" },
         { at: t("21:48:58"), tool: "extract_needs", summary: "3 needs from questionnaire", status: "ok" },
-        { at: t("21:49:10"), tool: "query_nearby_units", summary: "4 units within 6 km", status: "ok" },
+        { at: t("21:49:10"), tool: "query_nearby_units", summary: "4 units within 3.7 mi", status: "ok" },
         { at: t("21:49:29"), tool: "summarize_report", summary: "Incident report drafted", status: "ok" },
       ],
       nearestUnits: units(
-        { id: "EMS-14", type: "EMS", distanceKm: 1.8, availability: "Available" },
-        { id: "SAR-03", type: "SAR", distanceKm: 2.4, availability: "On scene — Sector D" },
-        { id: "FIRE-22", type: "FIRE", distanceKm: 3.1 },
-        { id: "EMS-09", type: "EMS", distanceKm: 5.7, availability: "Available" },
+        { id: "EMS-14", type: "EMS", distanceMi: 1.1, availability: "Available" },
+        { id: "SAR-03", type: "SAR", distanceMi: 1.5, availability: "On scene — Sector D" },
+        { id: "FIRE-22", type: "FIRE", distanceMi: 1.9 },
+        { id: "EMS-09", type: "EMS", distanceMi: 3.5, availability: "Available" },
       ),
     },
   },
@@ -211,13 +211,13 @@ const seeds: Seed[] = [
       tools: [
         { at: t("22:06:50"), tool: "classify_detection", summary: "Rules → possible_person / verify", status: "ok" },
         { at: t("22:07:05"), tool: "flag_missing_data", summary: "4 evidence gaps flagged", status: "partial" },
-        { at: t("22:07:22"), tool: "query_nearby_units", summary: "3 units within 5 km", status: "ok" },
+        { at: t("22:07:22"), tool: "query_nearby_units", summary: "3 units within 3.1 mi", status: "ok" },
         { at: t("22:07:41"), tool: "summarize_report", summary: "Incident report drafted", status: "ok" },
       ],
       nearestUnits: units(
-        { id: "SAR-03", type: "SAR", distanceKm: 0.9, availability: "On scene — Sector D" },
-        { id: "EMS-14", type: "EMS", distanceKm: 2.2, availability: "Available" },
-        { id: "FIRE-22", type: "FIRE", distanceKm: 3.6 },
+        { id: "SAR-03", type: "SAR", distanceMi: 0.6, availability: "On scene — Sector D" },
+        { id: "EMS-14", type: "EMS", distanceMi: 1.4, availability: "Available" },
+        { id: "FIRE-22", type: "FIRE", distanceMi: 2.2 },
       ),
     },
     extraEvents: [
@@ -262,7 +262,7 @@ const seeds: Seed[] = [
         { at: t("22:20:40"), tool: "query_nearby_units", summary: "FIRE units only (hazard)", status: "ok" },
         { at: t("22:21:01"), tool: "summarize_report", summary: "Incident report drafted", status: "ok" },
       ],
-      nearestUnits: units({ id: "FIRE-22", type: "FIRE", distanceKm: 1.4 }, { id: "FIRE-07", type: "FIRE", distanceKm: 4.9, availability: "Available" }),
+      nearestUnits: units({ id: "FIRE-22", type: "FIRE", distanceMi: 0.9 }, { id: "FIRE-07", type: "FIRE", distanceMi: 3.0, availability: "Available" }),
     },
   },
   {
@@ -301,9 +301,9 @@ const seeds: Seed[] = [
       tools: [
         { at: t("22:31:40"), tool: "classify_detection", summary: "Rules → possible_person / verify", status: "ok" },
         { at: t("22:31:58"), tool: "flag_missing_data", summary: "4 evidence gaps flagged", status: "partial" },
-        { at: t("22:32:12"), tool: "query_nearby_units", summary: "2 units within 5 km", status: "ok" },
+        { at: t("22:32:12"), tool: "query_nearby_units", summary: "2 units within 3.1 mi", status: "ok" },
       ],
-      nearestUnits: units({ id: "SAR-11", type: "SAR", distanceKm: 1.2 }, { id: "EMS-09", type: "EMS", distanceKm: 3.3, availability: "Available" }),
+      nearestUnits: units({ id: "SAR-11", type: "SAR", distanceMi: 0.7 }, { id: "EMS-09", type: "EMS", distanceMi: 2.1, availability: "Available" }),
     },
   },
   {
@@ -338,12 +338,12 @@ const seeds: Seed[] = [
       tools: [
         { at: t("22:39:20"), tool: "classify_detection", summary: "Rules → likely_person / ranked", status: "ok" },
         { at: t("22:39:35"), tool: "extract_needs", summary: "2 needs from questionnaire", status: "ok" },
-        { at: t("22:39:50"), tool: "query_nearby_units", summary: "3 units within 6 km", status: "ok" },
+        { at: t("22:39:50"), tool: "query_nearby_units", summary: "3 units within 3.7 mi", status: "ok" },
       ],
       nearestUnits: units(
-        { id: "EMS-21", type: "EMS", distanceKm: 1.1, availability: "Available" },
-        { id: "SAR-03", type: "SAR", distanceKm: 3.0 },
-        { id: "EMS-14", type: "EMS", distanceKm: 4.6, availability: "Committed" },
+        { id: "EMS-21", type: "EMS", distanceMi: 0.7, availability: "Available" },
+        { id: "SAR-03", type: "SAR", distanceMi: 1.9 },
+        { id: "EMS-14", type: "EMS", distanceMi: 2.9, availability: "Committed" },
       ),
     },
   },

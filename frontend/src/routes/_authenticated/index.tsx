@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, ArrowUpRight, Bot, Grid3x3, UserCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Bot, Grid3x3, Inbox, UserCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReach } from "@/lib/reach/store";
 import { needsResponse } from "@/lib/reach/priority";
@@ -39,6 +39,15 @@ function Overview() {
   return (
     <div className="space-y-6">
       <PageHeader title="Mission Overview" />
+
+      {cases.length === 0 && (
+        <div className="panel flex items-center gap-3 px-5 py-4">
+          <Inbox className="h-4 w-4 shrink-0 text-subtle" />
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">No active cases at this time.</span> New cases appear here automatically as robots report detections.
+          </p>
+        </div>
+      )}
 
       {/* The four numbers a manager needs first. Each opens its own board. */}
       <div className="panel grid grid-cols-2 divide-x divide-y overflow-hidden xl:grid-cols-4 xl:divide-y-0">
