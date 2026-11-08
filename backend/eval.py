@@ -520,9 +520,17 @@ def scratch_app(meta: dict):
         from fastapi.testclient import TestClient
 
         import main
+        from middleware.auth import verify_supabase_token
 
-        with TestClient(main.app) as client:
-            yield client
+        # In-process eval against a scratch DB: there is no logged-in user, so
+        # stand in for the Supabase check (the real check is covered by tests/test_auth.py).
+        main.app.dependency_overrides[verify_supabase_token] = lambda: {
+            "user_id": "eval-harness", "email": None, "claims": {}}
+        try:
+            with TestClient(main.app) as client:
+                yield client
+        finally:
+            main.app.dependency_overrides.pop(verify_supabase_token, None)
     finally:
         if engine is not None:
             from sqlalchemy.orm import close_all_sessions
