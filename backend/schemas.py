@@ -134,9 +134,20 @@ class CaseOut(ORMModel):
     updated_at: datetime
 
 
+class LatestReport(BaseModel):
+    """Newest IncidentReport for a case, enough to render "latest analysis said X"."""
+    report_id: int
+    rationale: str
+    rationale_conflict: list[str]
+    classification: str | None
+    status: str | None  # status the analysis used; None for reports stored before it was kept
+    created_at: datetime
+
+
 class CaseDetail(CaseOut):
     telemetry: list[TelemetryOut]
     surveys: list[SurveyOut]
+    latest_report: LatestReport | None = None
 
 
 class TelemetryAck(BaseModel):

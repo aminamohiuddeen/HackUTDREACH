@@ -17,6 +17,10 @@ dashboard never branches on `mode`.
   * protocol_cited: IncidentReport.details.protocol_cited is a list (the
     tools.py contract). The /analyze response surfaces a single string: the
     first entry if there are several, or "" if there are none. It is never null.
+  * rationale_conflict: phrases in the rationale that contradict the deterministic
+    classification/status (agents.safety.find_rationale_conflict). Always a list,
+    [] when consistent. Persisted in IncidentReport.details along with the status.
+    Report-only: it never changes the classification or status.
   * Case.assigned_unit_id is never written. A before_flush guard on this run's
     session aborts the run if this case's assigned_unit_id changes in it. It is
     scoped to this session and this case_id only, so a concurrent PATCH (which
@@ -31,11 +35,12 @@ import models
 import nemotron
 from agents import classifier, coordinator
 from agents.common import CLASSIFIER_ITERATION_BUDGET, TOTAL_ITERATION_CAP
+from agents.safety import find_rationale_conflict
 
 AGENTS = ("classifier", "coordinator")
 REPORT_KEYS = ("report_id", "case_id", "classification", "confidence", "status", "urgent",
                "urgent_reasons", "missing_signals", "risk_level", "needs",
-               "nearest_relevant_units", "protocol_cited", "rationale")
+               "nearest_relevant_units", "protocol_cited", "rationale", "rationale_conflict")
 
 
 class CaseNotFound(LookupError):
@@ -85,6 +90,7 @@ def build_report(row: models.IncidentReport, cls_out: dict) -> dict:
         "nearest_relevant_units": list(d.get("nearest_relevant_units") or []),
         "protocol_cited": cited[0] if isinstance(cited, list) and cited else "",
         "rationale": row.summary or "",
+        "rationale_conflict": list(d.get("rationale_conflict") or []),
     }
     assert tuple(report) == REPORT_KEYS
     return report
@@ -116,6 +122,15 @@ def run_analysis(case_id: int, db: Session) -> dict:
         row = db.get(models.IncidentReport, report_id) if report_id is not None else None
         if row is None:
             raise RuntimeError(f"no incident report was produced for case {case_id}")
+        # Rationale-contradiction check (agents/safety.py). Stored with the status the
+        # run used so GET /api/cases/{id} can show both later. Reassign the dict so
+        # SQLAlchemy sees the JSON change.
+        details = dict(row.details or {})
+        details["status"] = cls_out["status"]
+        details["rationale_conflict"] = find_rationale_conflict(
+            row.summary, details.get("classification", cls_out["classification"]),
+            cls_out["status"])
+        row.details = details
         # Tie every ToolLog row written during this run to its report.
         db.execute(update(models.ToolLog).where(models.ToolLog.id.in_(log_ids))
                    .values(report_id=row.id))

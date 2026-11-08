@@ -29,6 +29,7 @@ from schemas import (
     CaseOut,
     CasePatch,
     CaseStatus,
+    LatestReport,
     RobotOut,
     SectorOut,
     SurveyAck,
@@ -129,7 +130,7 @@ def telemetry_out(t: models.Telemetry) -> TelemetryOut:
 
 def case_out(c: models.Case, rank: int | None = None, cls=CaseOut, **extra):
     fields = {k: getattr(c, k) for k in cls.model_fields
-              if k not in ("location", "rank", "telemetry", "surveys")}
+              if k not in ("location", "rank", "telemetry", "surveys", "latest_report")}
     loc = {"lat": c.lat, "lng": c.lng} if c.lat is not None and c.lng is not None else None
     return cls.model_validate({**fields, "location": loc, "rank": rank, **extra})
 
@@ -194,6 +195,19 @@ def _rank_key(c: models.Case):
 def compute_ranks(db: Session) -> dict[int, int]:
     ranked = db.scalars(select(models.Case).where(models.Case.status == "ranked")).all()
     return {c.id: i for i, c in enumerate(sorted(ranked, key=_rank_key), start=1)}
+
+
+def latest_report_out(db: Session, case_id: int) -> LatestReport | None:
+    row = db.scalars(select(models.IncidentReport)
+                     .where(models.IncidentReport.case_id == case_id)
+                     .order_by(models.IncidentReport.id.desc()).limit(1)).first()
+    if row is None:
+        return None
+    d = row.details or {}
+    return LatestReport(report_id=row.id, rationale=row.summary or "",
+                        rationale_conflict=list(d.get("rationale_conflict") or []),
+                        classification=d.get("classification"), status=d.get("status"),
+                        created_at=row.created_at)
 
 
 def get_case_or_404(db: Session, case_id: int) -> models.Case:
@@ -300,6 +314,7 @@ def get_case(case_id: int, db: Session = Depends(get_db)):
         case, ranks.get(case.id), cls=CaseDetail,
         telemetry=[telemetry_out(t) for t in case.telemetry],
         surveys=[SurveyOut.model_validate(s) for s in case.surveys],
+        latest_report=latest_report_out(db, case.id),
     )
 
 
