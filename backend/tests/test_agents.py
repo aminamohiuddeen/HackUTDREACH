@@ -76,10 +76,10 @@ def test_tool_log_shape_and_agent_counts(client, seed_scenarios):
 
 
 def test_merge_units_dedupes_keeping_shortest():
-    a = [{"unit_id": "X", "distance_km": 3.0}, {"unit_id": "Y", "distance_km": 1.0}]
-    b = [{"unit_id": "X", "distance_km": 2.0}]
-    assert coordinator.merge_units([a, b]) == [{"unit_id": "Y", "distance_km": 1.0},
-                                               {"unit_id": "X", "distance_km": 2.0}]
+    a = [{"unit_id": "X", "distance_mi": 3.0}, {"unit_id": "Y", "distance_mi": 1.0}]
+    b = [{"unit_id": "X", "distance_mi": 2.0}]
+    assert coordinator.merge_units([a, b]) == [{"unit_id": "Y", "distance_mi": 1.0},
+                                               {"unit_id": "X", "distance_mi": 2.0}]
 
 
 @pytest.mark.parametrize("status,urgent,expected", [

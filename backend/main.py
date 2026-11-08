@@ -126,7 +126,8 @@ def get_source(
 def telemetry_out(t: models.Telemetry) -> TelemetryOut:
     return TelemetryOut.model_validate({
         **{c: getattr(t, c) for c in TelemetryOut.model_fields if c != "location"},
-        "location": {"lat": t.lat, "lng": t.lng, "source": t.location_source},
+        "location": ({"lat": t.lat, "lng": t.lng, "source": t.location_source}
+                     if t.lat is not None and t.lng is not None else None),
     })
 
 
@@ -253,29 +254,33 @@ def post_telemetry(payload: TelemetryIn, source: str = Depends(get_source),
     ensure_sector(db, payload.sector)
     touch_robot(db, payload.robot_id, payload.sector, source, payload.location)
     case = open_case(db, payload.robot_id, payload.sector, source)
+    loc = payload.location  # None for pods without GPS
 
     t = models.Telemetry(
         case_id=case.id,
         robot_id=payload.robot_id,
         sector=payload.sector,
-        lat=payload.location.lat,
-        lng=payload.location.lng,
-        location_source=payload.location.source,
+        lat=loc.lat if loc else None,
+        lng=loc.lng if loc else None,
+        location_source=loc.source if loc else None,
         temperature_c=payload.temperature_c,
         water_detected=payload.water_detected,
         infrared_triggered=payload.infrared_triggered,
         anomaly_size_cm2=payload.anomaly_size_cm2,
         motion_detected=payload.motion_detected,
         location_zone=payload.location_zone,
-        accelerometer=payload.accelerometer.model_dump(),
-        gyroscope=payload.gyroscope.model_dump(),
+        accelerometer=payload.accelerometer.model_dump() if payload.accelerometer else None,
+        gyroscope=payload.gyroscope.model_dump() if payload.gyroscope else None,
         heart_rate_bpm=payload.heart_rate_bpm,
         spo2_percent=payload.spo2_percent,
         timestamp=payload.timestamp or utcnow(),
         source=source,
     )
     db.add(t)
-    case.lat, case.lng, case.source = payload.location.lat, payload.location.lng, source
+    case.source = source
+    if loc is not None:
+        # A reading without GPS keeps the case's last known location (None for a new case).
+        case.lat, case.lng = loc.lat, loc.lng
     reclassify(db, case)
     db.commit()
 

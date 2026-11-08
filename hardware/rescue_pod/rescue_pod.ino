@@ -24,8 +24,11 @@
 // ================= CONFIG — EDIT THESE =================
 const char* WIFI_SSID = "rescuebot";
 const char* WIFI_PASS = "lavendar";
+// Public URL of the REACH FastAPI backend (uvicorn main:app on port 8000, behind ngrok/cloudflared).
 const char* SERVER    = "https://anthology-reheat-mystified.ngrok-free.dev";
-const char* UNIT_ID   = "REACH-01";
+const char* UNIT_ID   = "REACH-01";      // sent as robot_id
+const char* SECTOR    = "C4";            // grid sector the pod is deployed in
+const char* ZONE      = "residential";   // residential | industrial | road | unknown
 // =======================================================
 
 #define PIN_PIR     27
@@ -231,6 +234,8 @@ bool postJson(const char* path, JsonDocument& doc) {
     http.begin(plainClient, url);
   }
   http.addHeader("Content-Type", "application/json");
+  http.addHeader("X-Reach-Source", "hardware");          // backend tags records as hardware
+  http.addHeader("ngrok-skip-browser-warning", "1");      // avoid ngrok's interstitial page
   http.setTimeout(3000);
   String body;
   serializeJson(doc, body);
@@ -240,26 +245,44 @@ bool postJson(const char* path, JsonDocument& doc) {
   return code >= 200 && code < 300;
 }
 
+// POST /api/telemetry — flat payload matching the backend's TelemetryIn schema.
+// Fields this pod cannot measure are omitted (location: no GPS; water_detected: no sensor),
+// and the IMU is omitted when the MPU6050 is missing, so nothing is reported as a fake zero.
 void sendTelemetry() {
   JsonDocument doc;
-  doc["unit_id"] = UNIT_ID;
-  doc["uptime_ms"] = millis();
-  addReadings(doc["sensors"].to<JsonObject>());
-  postJson("/telemetry", doc);
+  doc["robot_id"]           = UNIT_ID;
+  doc["sector"]             = SECTOR;
+  doc["location_zone"]      = ZONE;
+  doc["motion_detected"]    = latest.motion;
+  // NOTE: this is the IR *proximity* sensor ("object close"), not a thermal/body-heat sensor.
+  doc["infrared_triggered"] = latest.irObject;
+  if (isnan(latest.tempC)) doc["temperature_c"] = nullptr;
+  else                     doc["temperature_c"] = latest.tempC;
+  if (mpuOk) {
+    JsonObject acc = doc["accelerometer"].to<JsonObject>();
+    acc["x"] = latest.ax; acc["y"] = latest.ay; acc["z"] = latest.az;
+    JsonObject gyr = doc["gyroscope"].to<JsonObject>();
+    gyr["x"] = latest.gx; gyr["y"] = latest.gy; gyr["z"] = latest.gz;
+  }
+  postJson("/api/telemetry", doc);
 }
 
+static const char* yesNo(bool v) { return v ? "yes" : "no"; }
+
+// POST /api/surveys — maps the pod's five OLED questions onto the backend's SurveyAnswers
+// ("yes" / "no"; the backend keeps anything unsent as "unknown").
 bool sendCase() {
   JsonDocument doc;
   caseCounter++;
-  doc["case_id"] = String(UNIT_ID) + "-" + String(caseCounter);
-  doc["unit_id"] = UNIT_ID;
-  JsonObject ans = doc["survey"].to<JsonObject>();
-  for (int i = 0; i < 5; i++) {
-    if (questions[i].scale) ans[questions[i].key] = answers[i];
-    else                    ans[questions[i].key] = (answers[i] == 1);
-  }
-  addReadings(doc["sensors"].to<JsonObject>());
-  return postJson("/case", doc);
+  doc["robot_id"] = UNIT_ID;
+  doc["sector"]   = SECTOR;
+  JsonObject ans = doc["answers"].to<JsonObject>();
+  ans["injured"]              = yesNo(answers[0] == 1);  // "Are you injured?"
+  ans["trapped"]              = yesNo(answers[1] != 1);  // "Can you move on your own?" (inverted)
+  ans["others_present"]       = yesNo(answers[2] > 0);   // "How many people are with you?" (count > 0)
+  ans["breathing_difficulty"] = yesNo(answers[3] == 1);  // "Is it hard to breathe?"
+  ans["immediate_help"]       = yesNo(answers[4] == 1);  // "Do you need water or medication?" (closest match)
+  return postJson("/api/surveys", doc);
 }
 
 void showIdle() {

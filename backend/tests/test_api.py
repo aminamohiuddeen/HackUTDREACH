@@ -56,6 +56,56 @@ def test_telemetry_source_from_header(client, telemetry_payload):
     assert r.json()["source"] == "hardware"
 
 
+# Shape the rescue-pod firmware sends: no GPS, water sensor or IMU; DHT read failed.
+POD_TELEMETRY = {"robot_id": "REACH-01", "sector": "C4", "location_zone": "residential",
+                 "motion_detected": True, "infrared_triggered": False, "temperature_c": None}
+
+
+def test_partial_hardware_telemetry_accepted(client):
+    r = client.post("/api/telemetry", json=POD_TELEMETRY, headers={"X-Reach-Source": "hardware"})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["source"] == "hardware"
+    assert body["case"]["location"] is None
+    t = client.get(f"/api/cases/{body['case_id']}").json()["telemetry"][-1]
+    assert t["location"] is None and t["accelerometer"] is None and t["gyroscope"] is None
+    assert t["temperature_c"] is None and t["water_detected"] is None  # stored as null, not guessed
+
+
+def test_minimal_telemetry_defaults_zone_unknown(client):
+    r = client.post("/api/telemetry", json={"robot_id": "REACH-02", "sector": "C5",
+                                            "motion_detected": False, "infrared_triggered": False})
+    assert r.status_code == 201, r.text
+    t = client.get(f"/api/cases/{r.json()['case_id']}").json()["telemetry"][-1]
+    assert t["location_zone"] == "unknown"
+
+
+def test_telemetry_without_gps_keeps_last_known_case_location(client, telemetry_payload):
+    first = client.post("/api/telemetry", json=telemetry_payload(robot_id="REACH-03")).json()
+    assert first["case"]["location"] == {"lat": 32.98, "lng": -96.75}
+    second = client.post("/api/telemetry",
+                         json=telemetry_payload(robot_id="REACH-03", location=None, accelerometer=None,
+                                                gyroscope=None))
+    assert second.status_code == 201, second.text
+    assert second.json()["case_id"] == first["case_id"]
+    assert second.json()["case"]["location"] == {"lat": 32.98, "lng": -96.75}
+
+
+def test_pod_survey_shape_accepted(client):
+    """Body built by rescue_pod.ino sendCase(): yes/no strings, robot_id + sector."""
+    body = {"robot_id": "REACH-01", "sector": "C4",
+            "answers": {"injured": "yes", "trapped": "no", "others_present": "yes",
+                        "breathing_difficulty": "no", "immediate_help": "yes"}}
+    r = client.post("/api/surveys", json=body, headers={"X-Reach-Source": "hardware"})
+    assert r.status_code == 201, r.text
+    assert r.json()["source"] == "hardware"
+
+
+def test_telemetry_still_requires_core_fields(client):
+    r = client.post("/api/telemetry", json={"robot_id": "REACH-01", "sector": "C4"})
+    assert r.status_code == 422  # motion_detected / infrared_triggered remain required
+
+
 def test_telemetry_invalid_source_rejected(client, telemetry_payload):
     r = client.post("/api/telemetry?source=bogus", json=telemetry_payload())
     assert r.status_code == 422

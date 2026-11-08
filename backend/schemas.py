@@ -32,17 +32,19 @@ class Vec3(BaseModel):
 
 
 class TelemetryIn(BaseModel):
+    # Hardware pods may lack GPS, a water sensor or an IMU, and a DHT read can fail:
+    # those fields are optional and stored as null (never fabricated).
     robot_id: str = Field(min_length=1)
     sector: str = Field(min_length=1)
-    location: Location
-    temperature_c: float
-    water_detected: bool
+    location: Location | None = None
+    temperature_c: float | None = None
+    water_detected: bool | None = None
     infrared_triggered: bool
     anomaly_size_cm2: float | None = Field(default=None, ge=0)
     motion_detected: bool
-    location_zone: LocationZone
-    accelerometer: Vec3
-    gyroscope: Vec3
+    location_zone: LocationZone = "unknown"
+    accelerometer: Vec3 | None = None
+    gyroscope: Vec3 | None = None
     heart_rate_bpm: float | None = None
     spo2_percent: float | None = None
     timestamp: datetime | None = None  # server-set if absent
@@ -83,15 +85,15 @@ class TelemetryOut(ORMModel):
     case_id: int | None
     robot_id: str
     sector: str
-    location: Location
-    temperature_c: float
-    water_detected: bool
+    location: Location | None
+    temperature_c: float | None
+    water_detected: bool | None
     infrared_triggered: bool
     anomaly_size_cm2: float | None
     motion_detected: bool
     location_zone: LocationZone
-    accelerometer: Vec3
-    gyroscope: Vec3
+    accelerometer: Vec3 | None
+    gyroscope: Vec3 | None
     heart_rate_bpm: float | None
     spo2_percent: float | None
     timestamp: datetime

@@ -84,9 +84,9 @@ def merge_units(lists: list[list[dict]]) -> list[dict]:
     for ranked in lists:
         for u in ranked:
             uid = u.get("unit_id")
-            if uid is not None and (uid not in best or u["distance_km"] < best[uid]["distance_km"]):
+            if uid is not None and (uid not in best or u["distance_mi"] < best[uid]["distance_mi"]):
                 best[uid] = u
-    return sorted(best.values(), key=lambda u: (u["distance_km"], u["unit_id"]))
+    return sorted(best.values(), key=lambda u: (u["distance_mi"], u["unit_id"]))
 
 
 class _Run:

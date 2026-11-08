@@ -17,7 +17,7 @@ from tools import (
 
 SCENARIO_2 = (32.9855, -96.7502)  # ranked survivor (simulator.py)
 SCENARIO_3 = (32.9710, -96.7555)  # residential verify (simulator.py)
-UNIT_KEYS = {"unit_id", "name", "unit_type", "distance_km"}
+UNIT_KEYS = {"unit_id", "name", "unit_type", "distance_mi"}
 
 
 # --- get_nearest_units ---------------------------------------------------------
@@ -27,7 +27,7 @@ def test_nearest_units_sorted_ascending_with_exact_keys(db):
     assert isinstance(units, list)
     assert len(units) == len(SEED_UNITS)
     assert all(set(u) == UNIT_KEYS for u in units)
-    dists = [u["distance_km"] for u in units]
+    dists = [u["distance_mi"] for u in units]
     assert dists == sorted(dists)
 
 
@@ -209,3 +209,12 @@ def test_live_loop_truncates(monkeypatch):
     out = nemotron.chat_with_tools([], TOOL_SCHEMAS, max_iterations=3)
     assert out["truncated"] and out["iterations"] == 3 and len(out["tool_calls"]) == 3
     assert set(out) == {"content", "messages", "tool_calls", "iterations", "truncated"}
+
+
+def test_nearest_units_distance_is_miles_rounded_to_tenth(db):
+    """distance_mi = haversine km x 0.621371, rounded to 0.1 mi."""
+    by_id = {u[0]: u for u in SEED_UNITS}
+    for unit in get_nearest_units(*SCENARIO_2, "any", db=db):
+        seed = by_id[unit["unit_id"]]
+        km = haversine_km(SCENARIO_2[0], SCENARIO_2[1], seed[4], seed[5])
+        assert unit["distance_mi"] == round(km * 0.621371, 1)

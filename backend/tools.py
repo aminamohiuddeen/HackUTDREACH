@@ -215,6 +215,9 @@ def get_sector_status(sector: str, db: Session | None = None) -> dict:
         }
 
 
+KM_TO_MI = 0.621371
+
+
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     r = 6371.0088
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -241,10 +244,10 @@ def get_nearest_units(lat: float, lng: float, need_type: str,
             q = q.where(models.Unit.unit_type == nt)
         ranked = [
             {"unit_id": u.id, "name": u.name, "unit_type": u.unit_type,
-             "distance_km": round(haversine_km(lat, lng, u.lat, u.lng), 3)}
+             "distance_mi": round(haversine_km(lat, lng, u.lat, u.lng) * KM_TO_MI, 1)}
             for u in s.scalars(q).all()
         ]
-    ranked.sort(key=lambda u: (u["distance_km"], u["unit_id"]))
+    ranked.sort(key=lambda u: (u["distance_mi"], u["unit_id"]))
     return ranked
 
 
