@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import config
 import models
 import tools
 from agents.classifier import classify_case, survey_responded
@@ -223,6 +224,27 @@ def get_case_or_404(db: Session, case_id: int) -> models.Case:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+CONFIG_NOTE = (
+    "Thresholds are set by the responding agency's SOP. Defaults shown; production "
+    "deployments override via config. zone_weighting and unit_type_mapping are shown for "
+    "transparency; the current classifier and coordinator use hardcoded values that match "
+    "these defaults."
+)
+
+
+@app.get("/api/config")
+def get_config():
+    """Read-only view of the responder thresholds the classifier uses."""
+    return {
+        "anomaly_size_cm2": {**config.ANOMALY_SIZE_CM2, "source": "default"},
+        "zone_weighting": {**config.ZONE_WEIGHTING, "source": "default"},
+        "signals_required_for_likely_person": config.SIGNALS_REQUIRED_FOR_LIKELY_PERSON,
+        "unit_type_mapping": {k: list(v) for k, v in config.UNIT_TYPE_MAPPING.items()},
+        "verify_window_seconds": config.VERIFY_WINDOW_SECONDS,
+        "note": CONFIG_NOTE,
+    }
 
 
 @app.post("/api/telemetry", response_model=TelemetryAck, status_code=201)

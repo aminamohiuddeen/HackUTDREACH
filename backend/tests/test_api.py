@@ -1,3 +1,8 @@
+import config
+import simulator
+from agents.classifier import classify_case
+
+
 def survey_payload(robot_id="r1", sector="S1", **answers):
     return {"robot_id": robot_id, "sector": sector, "answers": answers}
 
@@ -17,7 +22,7 @@ def test_docs_and_openapi_load(client):
     spec = client.get("/openapi.json").json()
     for path in ("/health", "/api/telemetry", "/api/surveys", "/api/robots", "/api/cases",
                  "/api/cases/{case_id}", "/api/cases/{case_id}/analyze", "/api/sectors",
-                 "/api/units"):
+                 "/api/units", "/api/config"):
         assert path in spec["paths"]
 
 
@@ -417,3 +422,61 @@ def test_list_units(client):
 
 def test_list_robots_empty(client):
     assert client.get("/api/robots").json() == []
+
+
+# --- /api/config ------------------------------------------------------------
+
+def test_get_config_shape(client):
+    r = client.get("/api/config")
+    assert r.status_code == 200
+    assert r.json() == {
+        "anomaly_size_cm2": {"min": 400, "max": 8000, "source": "default"},
+        "zone_weighting": {"residential": 1, "industrial": 0, "road": 0, "unknown": 0,
+                           "source": "default"},
+        "signals_required_for_likely_person": 2,
+        "unit_type_mapping": {
+            "trapped": ["FIRE", "SAR"],
+            "injured": ["EMS"],
+            "breathing_difficulty": ["EMS"],
+            "immediate_help": ["EMS"],
+            "others_present": ["SAR"],
+            "verify": ["SAR"],
+        },
+        "verify_window_seconds": 300,
+        "note": ("Thresholds are set by the responding agency's SOP. Defaults shown; "
+                 "production deployments override via config. zone_weighting and "
+                 "unit_type_mapping are shown for transparency; the current classifier and "
+                 "coordinator use hardcoded values that match these defaults."),
+    }
+
+
+def test_get_config_does_not_mutate_config(client):
+    client.get("/api/config")
+    assert "source" not in config.ANOMALY_SIZE_CM2
+    assert "source" not in config.ZONE_WEIGHTING
+
+
+def test_classify_case_simulator_scenarios_unchanged():
+    expected = {
+        1: ("object", "cleared"),
+        2: ("likely_person", "ranked"),
+        3: ("possible_person", "verify"),
+        4: ("object", "unverified"),
+    }
+    for num, (cls, status) in expected.items():
+        sc = simulator.SCENARIOS[num]
+        r = classify_case(sc["telemetry"], sc["survey"])
+        assert (r["classification"], r["status"]) == (cls, status), num
+
+
+def test_classify_case_reads_anomaly_bounds_from_config(monkeypatch):
+    t = [{"infrared_triggered": True, "anomaly_size_cm2": 2200,
+          "motion_detected": False, "location_zone": "residential"}]
+    r = classify_case(t, None)
+    assert "ir_human_sized_anomaly" in r["signals"]
+    assert (r["classification"], r["status"]) == ("possible_person", "verify")
+
+    monkeypatch.setattr(config, "ANOMALY_SIZE_CM2", {"min": 5000, "max": 9000})
+    r = classify_case(t, None)
+    assert "ir_human_sized_anomaly" not in r["signals"]
+    assert (r["classification"], r["status"]) == ("object", "unverified")

@@ -1,4 +1,5 @@
-from agents.classifier import classify_case
+import config
+from agents.classifier import classify_case, is_human_sized
 
 
 def tel(**overrides):
@@ -138,9 +139,17 @@ def test_unknown_zone_reported_missing():
 
 
 def test_anomaly_size_bounds_inclusive():
-    for area, expected in ((399.9, False), (400, True), (8000, True), (8000.1, False)):
+    lo, hi = config.ANOMALY_SIZE_CM2["min"], config.ANOMALY_SIZE_CM2["max"]
+    for area, expected in ((lo - 0.1, False), (lo, True), (hi, True), (hi + 0.1, False)):
+        assert is_human_sized(area) is expected
         r = classify_case([tel(infrared_triggered=True, anomaly_size_cm2=area)], None)
         assert ("ir_human_sized_anomaly" in r["signals"]) is expected
+
+
+def test_is_human_sized_reads_config_each_call(monkeypatch):
+    monkeypatch.setattr(config, "ANOMALY_SIZE_CM2", {"min": 1000, "max": 2000})
+    assert is_human_sized(500) is False
+    assert is_human_sized(1500) is True
 
 
 def test_survey_no_answers_not_urgent():

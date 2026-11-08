@@ -16,9 +16,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-HUMAN_ANOMALY_MIN_CM2 = 400.0
-HUMAN_ANOMALY_MAX_CM2 = 8000.0
-SURVEY_WAIT_SECONDS = 300  # how long a VERIFY case waits for a survey response
+import config  # read config.X at call time so overrides/monkeypatches apply
 
 SIGNAL_IR_HUMAN_SIZED = "ir_human_sized_anomaly"
 SIGNAL_MOTION = "motion_detected"
@@ -39,7 +37,8 @@ def _get(obj: Any, key: str, default: Any = None) -> Any:
 
 
 def is_human_sized(area_cm2: float | None) -> bool:
-    return area_cm2 is not None and HUMAN_ANOMALY_MIN_CM2 <= area_cm2 <= HUMAN_ANOMALY_MAX_CM2
+    bounds = config.ANOMALY_SIZE_CM2
+    return area_cm2 is not None and bounds["min"] <= area_cm2 <= bounds["max"]
 
 
 def survey_responded(survey: Any) -> bool:
@@ -107,7 +106,7 @@ def classify_case(telemetry_list: Iterable[Any] | None, survey: Any = None) -> d
         # A real answer is direct evidence of a responsive person: ranks on its own.
         classification, status = "likely_person", "ranked"
         confidence = min(0.95, 0.65 + 0.1 * (n - 1))
-    elif n >= 2:
+    elif n >= config.SIGNALS_REQUIRED_FOR_LIKELY_PERSON:
         # e.g. IR + human-sized anomaly + residential, no survey yet. Never ranked.
         classification, status = "possible_person", "verify"
         confidence = min(0.6, 0.25 + 0.1 * n)
