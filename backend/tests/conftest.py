@@ -9,6 +9,34 @@ import main
 from database import Base, SessionLocal, engine
 
 
+@pytest.fixture(autouse=True)
+def no_live_nvidia(monkeypatch):
+    """Mock mode by default, whatever .env says. Live-path tests install a fake client."""
+    import nemotron
+
+    monkeypatch.setenv("NVIDIA_API_KEY", "")
+
+    def _refuse():
+        raise AssertionError("test attempted a live NVIDIA call")
+
+    monkeypatch.setattr(nemotron, "get_client", _refuse)
+
+
+@pytest.fixture
+def seed_scenarios():
+    """Post simulator scenarios 1-4 through the API so case ids 1-4 match the scenarios."""
+    import simulator
+
+    def run(c):
+        for n in (1, 2, 3, 4):
+            sc = simulator.SCENARIOS[n]
+            for t in sc["telemetry"]:
+                assert c.post("/api/telemetry", json=t).status_code == 201
+            if sc["survey"]:
+                assert c.post("/api/surveys", json=sc["survey"]).status_code == 201
+    return run
+
+
 @pytest.fixture
 def client():
     Base.metadata.drop_all(bind=engine)

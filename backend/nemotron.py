@@ -5,7 +5,8 @@ Env:
   NVIDIA_MODEL    - defaults to nvidia/nemotron-3-super-120b-a12b
 
 chat_with_tools() returns the same shape in live and mock mode:
-  {content, messages, tool_calls: [{name, args, result}], iterations, truncated}
+  {content, messages, tool_calls: [{name, args, result, reasoning_content}], iterations,
+   truncated}
 """
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+DEFAULT_MODEL = "nvidia/nemotron-3.5-super-vl-120b-a12b"
 MOCK_CONTENT = "mock: no tool calls executed"
 _PLACEHOLDER_KEYS = {"", "your_key_here"}
 
@@ -89,6 +90,9 @@ def chat_with_tools(
         msg = client.chat.completions.create(**kwargs).choices[0].message
         content = msg.content or ""
         calls = msg.tool_calls or []
+        # Reasoning text the API returns alongside the message. Recorded in the log only;
+        # never sent back to the model.
+        reasoning = getattr(msg, "reasoning_content", None)
 
         assistant: dict = {"role": "assistant", "content": content}
         if calls:
@@ -105,7 +109,8 @@ def chat_with_tools(
         for c in calls:
             name = c.function.name
             args, result = _run_tool(tool_functions.get(name), name, c.function.arguments)
-            log.append({"name": name, "args": args, "result": result})
+            log.append({"name": name, "args": args, "result": result,
+                        "reasoning_content": reasoning})
             messages.append({"role": "tool", "tool_call_id": c.id,
                              "content": json.dumps(result, default=str)})
 

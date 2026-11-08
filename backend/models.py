@@ -121,3 +121,19 @@ class IncidentReport(Base):
     summary: Mapped[str] = mapped_column(Text)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class ToolLog(Base):
+    """One agent tool call made during /analyze. report_id ties the row to its run."""
+    __tablename__ = "tool_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    case_id: Mapped[int] = mapped_column(ForeignKey("cases.id"), index=True)
+    report_id: Mapped[int | None] = mapped_column(ForeignKey("incident_reports.id"),
+                                                  index=True, nullable=True)
+    agent: Mapped[str] = mapped_column(String)  # classifier | coordinator
+    thought: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tool: Mapped[str] = mapped_column(String)
+    args_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    observation_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -196,12 +196,115 @@ def test_resolved_opens_new_case(client, telemetry_payload):
     assert client.get(f"/api/cases/{cid}").json()["status"] == "resolved"
 
 
-def test_analyze_stub(client, telemetry_payload):
-    cid = client.post("/api/telemetry", json=telemetry_payload()).json()["case_id"]
-    r = client.post(f"/api/cases/{cid}/analyze")
-    assert r.status_code == 200
-    assert r.json() == {"status": "not_implemented"}
+def _keys_anywhere(obj) -> set[str]:
+    if isinstance(obj, dict):
+        return set(obj) | {k for v in obj.values() for k in _keys_anywhere(v)}
+    if isinstance(obj, list):
+        return {k for v in obj for k in _keys_anywhere(v)}
+    return set()
+
+
+def _assert_no_assignment(body):
+    keys = _keys_anywhere(body)
+    assert "assigned_unit_id" not in keys
+    assert "assigned" not in keys
+
+
+def test_analyze_404(client):
     assert client.post("/api/cases/999/analyze").status_code == 404
+
+
+def test_analyze_mock_ranked_case(client, seed_scenarios):
+    seed_scenarios(client)
+    r = client.post("/api/cases/2/analyze")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"report", "tool_log", "agent_counts", "mode", "truncated"}
+    assert body["mode"] == "mock" and body["truncated"] is False
+    rep = body["report"]
+    assert isinstance(rep["nearest_relevant_units"], list) and rep["nearest_relevant_units"]
+    assert rep["classification"] == "likely_person"
+    assert rep["status"] == "ranked"
+    assert rep["risk_level"] == "critical"
+    assert rep["needs"] == ["EMS", "FIRE", "SAR"]  # injured+immediate_help, trapped
+    _assert_no_assignment(body)
+    assert client.get("/api/cases/2").json()["assigned_unit_id"] is None
+
+
+def test_analyze_mock_verify_case(client, seed_scenarios):
+    seed_scenarios(client)
+    body = client.post("/api/cases/3/analyze").json()
+    rep = body["report"]
+    assert rep["status"] == "verify"
+    assert isinstance(rep["protocol_cited"], str) and rep["protocol_cited"]
+    assert rep["needs"] == ["SAR"] and rep["risk_level"] == "high"
+    assert any(e["tool"] == "search_protocol" for e in body["tool_log"])
+    _assert_no_assignment(body)
+
+
+def test_analyze_protocol_cited_always_string(client, seed_scenarios):
+    seed_scenarios(client)
+    for cid in (1, 2, 3, 4):
+        cited = client.post(f"/api/cases/{cid}/analyze").json()["report"]["protocol_cited"]
+        assert cited is not None
+        assert not isinstance(cited, list)
+        assert isinstance(cited, str)
+
+
+def test_analyze_no_need_rationale(client, seed_scenarios):
+    seed_scenarios(client)
+    for cid in (1, 4):  # cleared, unverified: no survey, not verify
+        rep = client.post(f"/api/cases/{cid}/analyze").json()["report"]
+        assert rep["needs"] == [] and rep["nearest_relevant_units"] == []
+        assert ("No specific need identified from survey answers; "
+                "unit suggestion not generated.") in rep["rationale"]
+
+
+def test_analyze_case_without_coordinates(client):
+    # Survey-only case: no telemetry, so the case has no lat/lng.
+    cid = client.post("/api/surveys", json=survey_payload(immediate_help="yes")).json()["case_id"]
+    rep = client.post(f"/api/cases/{cid}/analyze").json()["report"]
+    assert rep["needs"] == ["EMS"]
+    assert rep["nearest_relevant_units"] == []
+    assert "No coordinates recorded for this case" in rep["rationale"]
+
+
+def test_analyze_twice_separates_tool_logs(client, seed_scenarios):
+    import models
+    from database import SessionLocal
+
+    seed_scenarios(client)
+    a = client.post("/api/cases/2/analyze").json()
+    b = client.post("/api/cases/2/analyze").json()
+    assert a["report"]["report_id"] != b["report"]["report_id"]
+    with SessionLocal() as s:
+        for body in (a, b):
+            rows = s.query(models.ToolLog).filter_by(report_id=body["report"]["report_id"]) \
+                .order_by(models.ToolLog.id).all()
+            assert [(r.agent, r.tool, r.args_json, r.observation_json) for r in rows] == \
+                [(e["agent"], e["tool"], e["args"], e["observation"]) for e in body["tool_log"]]
+        assert s.query(models.ToolLog).filter(models.ToolLog.report_id.is_(None)).count() == 0
+
+
+def test_patch_assignment_during_analysis(client, seed_scenarios, monkeypatch):
+    """A human PATCH of assigned_unit_id mid-analysis succeeds; analysis never echoes it."""
+    import tools
+
+    seed_scenarios(client)
+    real = tools.get_sector_status
+    patch_status = []
+
+    def sector_status_with_concurrent_patch(*args, **kwargs):
+        r = client.patch("/api/cases/2", json={"assigned_unit_id": "EMS-1"})
+        patch_status.append(r.status_code)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tools, "get_sector_status", sector_status_with_concurrent_patch)
+    r = client.post("/api/cases/2/analyze")
+    assert patch_status == [200]
+    assert r.status_code == 200
+    _assert_no_assignment(r.json())
+    assert client.get("/api/cases/2").json()["assigned_unit_id"] == "EMS-1"
 
 
 # --- reference data ----------------------------------------------------------

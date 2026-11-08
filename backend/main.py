@@ -9,17 +9,20 @@ the header `X-Reach-Source: hardware` or the query param `?source=hardware`.
 """
 from __future__ import annotations
 
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models
 from agents.classifier import classify_case, survey_responded
+from agents.orchestrator import run_analysis
 from database import Base, SessionLocal, engine, get_db, utcnow
 from schemas import (
     CaseDetail,
@@ -79,7 +82,23 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="REACH Backend", version="0.1.0", lifespan=lifespan)
+class UTF8JSONResponse(JSONResponse):
+    """JSON with an explicit charset and ASCII-escaped non-ASCII characters.
+
+    Data is stored as UTF-8 (SQLite TEXT). Without a charset some clients
+    (e.g. Windows PowerShell 5.1 Invoke-RestMethod) decode the body as Latin-1,
+    turning "cm²" into "cmÂ²". Declaring utf-8 and escaping (² -> \\u00b2) makes
+    every client decode it the same way.
+    """
+    media_type = "application/json; charset=utf-8"
+
+    def render(self, content) -> bytes:
+        return json.dumps(content, ensure_ascii=True, allow_nan=False,
+                          separators=(",", ":")).encode("utf-8")
+
+
+app = FastAPI(title="REACH Backend", version="0.1.0", lifespan=lifespan,
+              default_response_class=UTF8JSONResponse)
 
 _origins = [o.strip() for o in os.getenv("FRONTEND_ORIGIN", "http://localhost:5173").split(",")
             if o.strip()]
@@ -302,8 +321,10 @@ def patch_case(case_id: int, patch: CasePatch, db: Session = Depends(get_db)):
 
 @app.post("/api/cases/{case_id}/analyze")
 def analyze_case(case_id: int, db: Session = Depends(get_db)):
+    """Run classifier + coordinator agents. Returns {report, tool_log, agent_counts, mode,
+    truncated}; same shape in live and mock mode. Never assigns a unit."""
     get_case_or_404(db, case_id)
-    return {"status": "not_implemented"}
+    return run_analysis(case_id, db)
 
 
 @app.get("/api/sectors", response_model=list[SectorOut])
