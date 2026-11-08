@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794112045114,
+      "tag": "0000_reach_approved_user_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794112229161,
+      "tag": "0001_role_lookup_respects_owner_policies",
+      "breakpoints": true
+    }
+  ]
+}
