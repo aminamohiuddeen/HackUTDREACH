@@ -30,7 +30,6 @@ export interface QuestionAnswer {
 export interface SensorSnapshot {
   temperatureC: Reading<number>;
   irTriggered: Reading<boolean>;
-  waterDetected: Reading<boolean>;
   motionDetected: Reading<boolean>;
   accel: Reading<Vec3>;
   gyro: Reading<Vec3>;
@@ -120,7 +119,7 @@ export interface RescueCase {
   status: CaseStatus;
   environmentalWarning: string | null;
   confidence: Confidence;
-  /** How intact/safe the environment is (structure, water, heat). */
+  /** How intact/safe the environment is (structure, heat). */
   environmentScore: Score;
   /** Survivor health condition, derived from questionnaire answers. null when no person is confirmed. */
   healthScore: Score;

@@ -57,7 +57,7 @@ def test_sync_reports_every_simulated_field(client, pod_state):
     sim = client.get("/api/sync-hardware").json()["simulated_fields"]["REACH-01"]
     # DHT read failed and IMU sent zeros, so those are simulated too.
     assert set(sim) == {"temperature_c", "accelerometer", "gyroscope",
-                        "location", "water_detected", "location_zone"}
+                        "location", "location_zone"}
 
 
 def test_sync_skips_already_ingested_entries(client, pod_state):

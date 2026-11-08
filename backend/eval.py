@@ -145,7 +145,7 @@ def sampled_scenario(rng: random.Random, idx: int) -> dict:
             sector=sector, lat=round(lat + rng.uniform(-3e-4, 3e-4), 6),
             lng=round(lng + rng.uniform(-3e-4, 3e-4), 6),
             temperature_c=round(rng.uniform(20, 45), 1),
-            water_detected=rng.random() < 0.3, infrared_triggered=ir,
+            infrared_triggered=ir,
             anomaly_size_cm2=_sample_size(rng) if ir else None,
             motion_detected=rng.random() < 0.3, location_zone=row_zone))
     kind = rng.choices(["none", "all_unknown", "answered"], weights=[50, 15, 35])[0]
@@ -564,8 +564,8 @@ def _describe_tel(rows: list[dict]) -> str:
     if not rows:
         return "none"
     parts = [f"zone={t['location_zone']} ir={t['infrared_triggered']} "
-             f"size={t['anomaly_size_cm2']} motion={t['motion_detected']} "
-             f"water={t['water_detected']}" for t in rows]
+             f"size={t['anomaly_size_cm2']} motion={t['motion_detected']}"
+             for t in rows]
     return f"{'; '.join(parts)} ({len(rows)} row{'s' if len(rows) != 1 else ''})"
 
 

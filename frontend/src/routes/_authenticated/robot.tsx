@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, Bot, Droplets, MapPin, Move3d, Orbit, Radar, Ruler, Thermometer, Wind, MessageSquareText, Wifi } from "lucide-react";
+import { Activity, Bot, MapPin, Move3d, Orbit, Radar, Ruler, Thermometer, Wind, MessageSquareText, Wifi } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useReach } from "@/lib/reach/store";
 import { fmtCoord, fmtTime } from "@/lib/reach/format";
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/robot")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { title: "Robot Monitor — REACH" },
-      { name: "description", content: "Live-style telemetry from REACH search robots: thermal, IR, water, motion, IMU and OLED answers." },
+      { name: "description", content: "Live-style telemetry from REACH search robots: thermal, IR, motion, IMU and OLED answers." },
       { property: "og:title", content: "Robot Monitor — REACH" },
       { property: "og:description", content: "Live-style telemetry from REACH search robots." },
     ],
@@ -89,7 +89,6 @@ function RobotMonitor() {
 
         <NumCard icon={Thermometer} label="Temperature" r={s.temperatureC} unit="°C" warn={(v) => v >= 45} />
         <BoolCard icon={Radar} label="Infrared trigger" r={s.irTriggered} on="Triggered" off="Not triggered" note="IR alone never confirms a person" />
-        <BoolCard icon={Droplets} label="Water detection" r={s.waterDetected} on="Water present" off="Dry" />
         <BoolCard icon={Wind} label="Motion detection" r={s.motionDetected} on="Motion" off="No motion" />
 
         <VecCard icon={Move3d} label="Accelerometer" r={s.accel} unit="m/s²" />

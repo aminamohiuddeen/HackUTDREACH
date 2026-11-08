@@ -8,7 +8,7 @@ const na = { value: null, source: "unavailable" as const };
 const base: SensorSnapshot = {
   temperatureC: { value: 22, source: "sensor" },
   irTriggered: { value: false, source: "sensor" },
-  waterDetected: na, motionDetected: { value: false, source: "sensor" },
+  motionDetected: { value: false, source: "sensor" },
   accel: na, gyro: na, anomalyAreaCm2: na,
 };
 

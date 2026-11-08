@@ -7,7 +7,7 @@ received at GET /state:
      "cases": [{"case_id", "unit_id", "survey": {...}, "sensors": {...}, "received_at"}]}
 
 These helpers map that shape onto TelemetryIn / SurveyIn. Readings the pod cannot provide
-(no GPS, no water sensor; DHT/IMU failures) are filled with simulated values so the dashboard
+(no GPS; DHT/IMU failures) are filled with simulated values so the dashboard
 and analysis have a complete record; every simulated field is reported back to the caller.
 Survivor evidence (anomaly size, vitals) is never simulated, since it would change how a case
 is classified.
@@ -75,17 +75,16 @@ def pod_telemetry(unit_id: str, data: dict, rng: random.Random) -> tuple[Telemet
     if gyro is None:
         gyro = dict(STILL_GYRO)
         simulated.append("gyroscope")
-    # No GPS, water sensor or zone knowledge on the pod.
+    # No GPS or zone knowledge on the pod.
     location = {"lat": round(BASE_LAT + rng.uniform(-0.0005, 0.0005), 6),
                 "lng": round(BASE_LNG + rng.uniform(-0.0005, 0.0005), 6), "source": "gps"}
-    simulated += ["location", "water_detected", "location_zone"]
+    simulated += ["location", "location_zone"]
 
     payload = TelemetryIn(
         robot_id=str(data.get("unit_id") or unit_id),
         sector=SECTOR,
         location=location,
         temperature_c=temp,
-        water_detected=False,
         # IR *proximity* sensor on the pod (object close), not thermal.
         infrared_triggered=bool(s.get("object_close_ir")),
         motion_detected=bool(s.get("motion_detected")),

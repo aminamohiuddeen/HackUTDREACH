@@ -87,7 +87,6 @@ def telemetry_payload():
             "sector": "S1",
             "location": {"lat": 32.98, "lng": -96.75, "source": "gps"},
             "temperature_c": 30.0,
-            "water_detected": False,
             "infrared_triggered": False,
             "anomaly_size_cm2": None,
             "motion_detected": False,

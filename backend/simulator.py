@@ -24,7 +24,6 @@ def telemetry(robot_id, sector, lat, lng, **fields):
         "sector": sector,
         "location": {"lat": lat, "lng": lng, "source": "gps"},
         "temperature_c": 29.0,
-        "water_detected": False,
         "infrared_triggered": False,
         "anomaly_size_cm2": None,
         "motion_detected": False,
@@ -42,9 +41,9 @@ SCENARIOS = {
         "name": "No confirmed survivor",
         "telemetry": [
             telemetry("sim-rover-1", "S2", 32.9901, -96.7480, temperature_c=33.5,
-                      water_detected=True, location_zone="industrial"),
+                      location_zone="industrial"),
             telemetry("sim-rover-1", "S2", 32.9903, -96.7478, temperature_c=34.1,
-                      water_detected=True, location_zone="industrial"),
+                      location_zone="industrial"),
         ],
         "survey": None,
         "expect": {"classification": "object", "status": "cleared"},
@@ -63,10 +62,10 @@ SCENARIOS = {
         "expect": {"classification": "likely_person", "status": "ranked", "urgent": True},
     },
     3: {
-        "name": "Water + human-sized IR in residential, no survey",
+        "name": "Human-sized IR in residential, no survey",
         "telemetry": [
             telemetry("sim-rover-3", "S4", 32.9710, -96.7555, temperature_c=24.5,
-                      water_detected=True, infrared_triggered=True, anomaly_size_cm2=1500,
+                      infrared_triggered=True, anomaly_size_cm2=1500,
                       location_zone="residential"),
         ],
         "survey": None,

@@ -74,7 +74,7 @@ def _telemetry_dict(t: models.Telemetry) -> dict:
     return {
         "id": t.id, "robot_id": t.robot_id, "sector": t.sector,
         "location": {"lat": t.lat, "lng": t.lng, "source": t.location_source},
-        "temperature_c": t.temperature_c, "water_detected": t.water_detected,
+        "temperature_c": t.temperature_c,
         "infrared_triggered": t.infrared_triggered, "anomaly_size_cm2": t.anomaly_size_cm2,
         "motion_detected": t.motion_detected, "location_zone": t.location_zone,
         "accelerometer": t.accelerometer, "gyroscope": t.gyroscope,

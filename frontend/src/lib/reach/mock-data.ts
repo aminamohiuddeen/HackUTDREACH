@@ -102,7 +102,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(21.4),
       irTriggered: s(false),
-      waterDetected: s(false),
       motionDetected: s(false),
       accel: s(v(0.02, -0.01, 9.79)),
       gyro: s(v(0.4, -0.2, 0.1)),
@@ -142,7 +141,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(29.8),
       irTriggered: s(true),
-      waterDetected: s(true),
       motionDetected: s(true),
       accel: s(v(0.11, 0.04, 9.81)),
       gyro: s(v(1.2, 0.6, -0.3)),
@@ -154,9 +152,9 @@ const seeds: Seed[] = [
     report: {
       generatedAt: t("21:49:31"),
       incidentReport:
-        "Survivor located in collapsed residence, 1400 block Elm (C4). Survivor reports injury, cannot move unaided, one additional person present. Requests water. Standing water detected at robot position.",
+        "Survivor located in collapsed residence, 1400 block Elm (C4). Survivor reports injury, cannot move unaided, one additional person present. Requests water.",
       rationale:
-        "Questionnaire responses are direct survivor evidence. Health score lowered by reported injury and immobility; environment integrity lowered by standing water and structural collapse.",
+        "Questionnaire responses are direct survivor evidence. Health score lowered by reported injury and immobility; environment integrity lowered by structural collapse.",
       missingData: ["Identity of second occupant", "Structural stability assessment"],
       tools: [
         { at: t("21:48:40"), tool: "classify_detection", summary: "Rules → likely_person / ranked", status: "ok" },
@@ -188,7 +186,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(31.2),
       irTriggered: s(true),
-      waterDetected: s(false),
       motionDetected: s(false),
       accel: s(v(0.05, 0.02, 9.8)),
       gyro: s(v(0.3, 0.1, 0.0)),
@@ -241,7 +238,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(68.5),
       irTriggered: s(true),
-      waterDetected: s(false),
       motionDetected: s(false),
       accel: s(v(0.01, 0.0, 9.8)),
       gyro: s(v(0.1, 0.0, 0.0)),
@@ -280,7 +276,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(27.1),
       irTriggered: s(true),
-      waterDetected: s(true),
       motionDetected: s(true),
       accel: s(v(0.3, -0.2, 9.6)),
       gyro: s(v(4.1, -2.2, 0.8)),
@@ -291,12 +286,12 @@ const seeds: Seed[] = [
     uncertainty: [
       "Anomaly size unavailable — robot tilted on unstable surface",
       "Zone unknown; location entered by operator",
-      "Motion may be from water flow",
+      "Motion may be from shifting debris",
     ],
     report: {
       generatedAt: t("22:32:15"),
       incidentReport: "IR and motion detected near flooded underpass (A5). Robot unstable; anomaly measurement failed.",
-      rationale: "Two signals present but both have plausible non-human sources (moving water). Requires human verification.",
+      rationale: "Two signals present but both have plausible non-human sources (shifting debris). Requires human verification.",
       missingData: ["Anomaly area", "Questionnaire response", "Zone classification", "GPS fix"],
       tools: [
         { at: t("22:31:40"), tool: "classify_detection", summary: "Rules → possible_person / verify", status: "ok" },
@@ -321,7 +316,6 @@ const seeds: Seed[] = [
     sensors: {
       temperatureC: s(24.6),
       irTriggered: s(true),
-      waterDetected: s(false),
       motionDetected: s(true),
       accel: s(v(0.04, 0.01, 9.8)),
       gyro: s(v(0.6, 0.2, 0.1)),

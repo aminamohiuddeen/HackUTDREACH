@@ -58,7 +58,6 @@ type BackendCase = {
 type BackendTelemetry = {
   id: number;
   temperature_c: number;
-  water_detected: boolean;
   infrared_triggered: boolean;
   anomaly_size_cm2: number | null;
   motion_detected: boolean;
@@ -157,7 +156,6 @@ function adaptTelemetryFields(raw: Pick<BackendCase, "telemetry" | "surveys">): 
     sensors: {
       temperatureC: sensorField(t?.temperature_c),
       irTriggered: sensorField(t?.infrared_triggered),
-      waterDetected: sensorField(t?.water_detected),
       motionDetected: sensorField(t?.motion_detected),
       accel: sensorField(t?.accelerometer),
       gyro: sensorField(t?.gyroscope),

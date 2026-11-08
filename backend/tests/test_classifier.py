@@ -8,7 +8,6 @@ def tel(**overrides):
         "sector": "S1",
         "location": {"lat": 32.98, "lng": -96.75, "source": "gps"},
         "temperature_c": 30.0,
-        "water_detected": False,
         "infrared_triggered": False,
         "anomaly_size_cm2": None,
         "motion_detected": False,
@@ -32,7 +31,7 @@ def survey(**answers):
 # --- The four required paths -------------------------------------------------
 
 def test_path1_no_survivor_object_cleared():
-    r = classify_case([tel(water_detected=True, temperature_c=34.0)], None)
+    r = classify_case([tel(temperature_c=34.0)], None)
     assert r["classification"] == "object"
     assert r["status"] == "cleared"
     assert "survey_response" in r["missing_signals"]
@@ -51,7 +50,7 @@ def test_path2_survey_response_likely_person_ranked_urgent():
 
 def test_path3_ir_human_sized_residential_no_survey_verify():
     r = classify_case(
-        [tel(water_detected=True, infrared_triggered=True, anomaly_size_cm2=1500,
+        [tel(infrared_triggered=True, anomaly_size_cm2=1500,
              location_zone="residential")],
         None,
     )

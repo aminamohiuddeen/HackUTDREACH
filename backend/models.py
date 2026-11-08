@@ -78,12 +78,11 @@ class Telemetry(Base):
     case_id: Mapped[int | None] = mapped_column(ForeignKey("cases.id"), index=True, nullable=True)
     robot_id: Mapped[str] = mapped_column(String, index=True)
     sector: Mapped[str] = mapped_column(String)
-    # Nullable: hardware pods may report without GPS, water sensor, IMU or a temperature read.
+    # Nullable: hardware pods may report without GPS, IMU or a temperature read.
     lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     location_source: Mapped[str | None] = mapped_column(String, nullable=True)  # gps | operator
     temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
-    water_detected: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     infrared_triggered: Mapped[bool] = mapped_column(Boolean)
     anomaly_size_cm2: Mapped[float | None] = mapped_column(Float, nullable=True)
     motion_detected: Mapped[bool] = mapped_column(Boolean)

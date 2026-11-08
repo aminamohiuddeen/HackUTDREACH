@@ -24,7 +24,6 @@ export function SensorTable({ s }: { s: SensorSnapshot }) {
   const rows: [string, string | null, typeof s.temperatureC.source][] = [
     ["Temperature", s.temperatureC.value !== null ? `${s.temperatureC.value} °C` : null, s.temperatureC.source],
     ["IR trigger", bool(s.irTriggered.value), s.irTriggered.source],
-    ["Water", bool(s.waterDetected.value), s.waterDetected.source],
     ["Motion", bool(s.motionDetected.value), s.motionDetected.source],
     ["Accel X/Y/Z", vec(s.accel.value), s.accel.source],
     ["Gyro X/Y/Z", vec(s.gyro.value), s.gyro.source],

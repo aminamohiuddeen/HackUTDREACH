@@ -56,7 +56,7 @@ def test_telemetry_source_from_header(client, telemetry_payload):
     assert r.json()["source"] == "hardware"
 
 
-# Shape the rescue-pod firmware sends: no GPS, water sensor or IMU; DHT read failed.
+# Shape the rescue-pod firmware sends: no GPS or IMU; DHT read failed.
 POD_TELEMETRY = {"robot_id": "REACH-01", "sector": "C4", "location_zone": "residential",
                  "motion_detected": True, "infrared_triggered": False, "temperature_c": None}
 
@@ -69,7 +69,8 @@ def test_partial_hardware_telemetry_accepted(client):
     assert body["case"]["location"] is None
     t = client.get(f"/api/cases/{body['case_id']}").json()["telemetry"][-1]
     assert t["location"] is None and t["accelerometer"] is None and t["gyroscope"] is None
-    assert t["temperature_c"] is None and t["water_detected"] is None  # stored as null, not guessed
+    assert t["temperature_c"] is None  # stored as null, not guessed
+    assert "water_detected" not in t
 
 
 def test_minimal_telemetry_defaults_zone_unknown(client):

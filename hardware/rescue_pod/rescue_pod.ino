@@ -246,7 +246,7 @@ bool postJson(const char* path, JsonDocument& doc) {
 }
 
 // POST /api/telemetry — flat payload matching the backend's TelemetryIn schema.
-// Fields this pod cannot measure are omitted (location: no GPS; water_detected: no sensor),
+// Fields this pod cannot measure are omitted (location: no GPS),
 // and the IMU is omitted when the MPU6050 is missing, so nothing is reported as a fake zero.
 void sendTelemetry() {
   JsonDocument doc;
