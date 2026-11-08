@@ -182,6 +182,32 @@ class SectorOut(ORMModel):
     zone_type: str
 
 
+SectorState = Literal["unsearched", "urgent", "active", "cleared"]
+
+
+class SectorStateOut(BaseModel):
+    """GET /api/sectors: a sector plus its coverage state, derived at request time.
+
+    state: see tools.sector_state() (urgent -> active -> unsearched -> cleared).
+    case_count_by_status: every CaseStatus key, zero-filled.
+    urgent_cases: cases that are currently ranked AND urgent only (a resolved or
+        dispatched urgent case is not counted). This differs on purpose from
+        tools.get_sector_status()'s urgent_cases, which keeps its existing
+        all-urgent-including-resolved semantics for audit.
+    robot_count: robots whose current sector is this one.
+    last_telemetry_at: newest Telemetry.received_at for readings taken in this sector;
+        null if none (never searched).
+    """
+    id: str
+    name: str
+    zone_type: str
+    state: SectorState
+    case_count_by_status: dict[str, int]
+    urgent_cases: int
+    robot_count: int
+    last_telemetry_at: datetime | None
+
+
 class UnitOut(ORMModel):
     id: str
     name: str

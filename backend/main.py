@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models
+import tools
 from agents.classifier import classify_case, survey_responded
 from agents.orchestrator import run_analysis
 from database import Base, SessionLocal, engine, get_db, utcnow
@@ -31,7 +32,7 @@ from schemas import (
     CaseStatus,
     LatestReport,
     RobotOut,
-    SectorOut,
+    SectorStateOut,
     SurveyAck,
     SurveyIn,
     SurveyOut,
@@ -342,9 +343,19 @@ def analyze_case(case_id: int, db: Session = Depends(get_db)):
     return run_analysis(case_id, db)
 
 
-@app.get("/api/sectors", response_model=list[SectorOut])
+@app.get("/api/sectors", response_model=list[SectorStateOut])
 def list_sectors(db: Session = Depends(get_db)):
-    return db.scalars(select(models.Sector).order_by(models.Sector.id)).all()
+    """Sectors with coverage state ("which sectors have not been searched?").
+    Derived at request time from cases, robots and telemetry; nothing is stored."""
+    out = []
+    for sec_id in db.scalars(select(models.Sector.id).order_by(models.Sector.id)):
+        summ = tools.sector_summary(db, sec_id)
+        out.append(SectorStateOut(
+            id=summ["sector"], name=summ["name"], zone_type=summ["zone_type"],
+            state=tools.sector_state(summ), case_count_by_status=summ["case_counts"],
+            urgent_cases=summ["ranked_urgent"], robot_count=len(summ["robots"]),
+            last_telemetry_at=summ["last_telemetry_at"]))
+    return out
 
 
 @app.get("/api/units", response_model=list[UnitOut])

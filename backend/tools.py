@@ -17,12 +17,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, get_args
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 import models
 from database import SessionLocal, utcnow
-from schemas import Classification
+from schemas import CaseStatus, Classification
 
 PROTOCOL_PATH = Path(__file__).parent / "protocol_kb" / "triage_protocols.md"
 NEED_TYPES = {"EMS", "FIRE", "SAR"}
@@ -136,27 +136,80 @@ def get_sensor_history(robot_id: str, sector: str, window_minutes: int = 30,
                 "readings": [_telemetry_dict(t) for t in rows]}
 
 
+CASE_STATUSES = get_args(CaseStatus)  # verify, ranked, unverified, cleared, dispatched, resolved
+OPEN_CASE_STATUSES = ("ranked", "verify", "unverified", "dispatched")  # cleared/resolved = closed
+
+
+def sector_summary(s: Session, sector_id: str) -> dict | None:
+    """Per-sector aggregation shared by get_sector_status() and GET /api/sectors.
+
+    None if the sector does not exist. case_counts is zero-filled over every CaseStatus.
+      urgent_cases   every urgent case, any status (get_sector_status's audit semantics)
+      ranked_urgent  cases currently ranked AND urgent (what /api/sectors reports)
+      last_telemetry_at  MAX(Telemetry.received_at) for readings taken in this sector
+                         (Telemetry.sector, not the robot's current sector)
+    """
+    sec = s.get(models.Sector, sector_id)
+    if sec is None:
+        return None
+    cases = s.scalars(select(models.Case).where(models.Case.sector == sector_id)).all()
+    counts = {st: 0 for st in CASE_STATUSES}
+    for c in cases:
+        counts[c.status] = counts.get(c.status, 0) + 1
+    robots = s.scalars(select(models.Robot).where(models.Robot.sector == sector_id)
+                       .order_by(models.Robot.id)).all()
+    last_tel = s.scalar(select(func.max(models.Telemetry.received_at))
+                        .where(models.Telemetry.sector == sector_id))
+    return {
+        "sector": sec.id, "name": sec.name, "zone_type": sec.zone_type,
+        "case_counts": counts, "total_cases": len(cases),
+        "urgent_cases": sum(1 for c in cases if c.urgent),
+        "ranked_urgent": sum(1 for c in cases if c.status == "ranked" and c.urgent),
+        "robots": list(robots),
+        "last_telemetry_at": last_tel,
+    }
+
+
+def sector_state(summary: dict) -> str:
+    """Coverage state for one sector_summary(). Pure; first match wins.
+
+    Order is urgent -> active -> unsearched -> cleared on purpose. A sector can have
+    open cases with no telemetry at all (survey-only survivors: POST /api/surveys opens
+    a case without any robot reading). An unsearched-and-urgent sector must surface as
+    urgent, not unsearched, so case-based states are checked before telemetry coverage.
+    "cleared" is the catch-all: telemetry exists and no case is open (cleared/resolved
+    cases are closed but still counted in case_counts).
+    """
+    counts = summary["case_counts"]
+    if summary["ranked_urgent"] > 0:
+        return "urgent"
+    if any(counts.get(st, 0) > 0 for st in OPEN_CASE_STATUSES):
+        return "active"
+    if summary["last_telemetry_at"] is None:
+        return "unsearched"
+    return "cleared"
+
+
 def get_sector_status(sector: str, db: Session | None = None) -> dict:
-    """Sector info, case counts by status, robots and units in the sector."""
+    """Sector info, case counts by status, robots and units in the sector.
+
+    Output shape is unchanged by the sector_summary() refactor: case_counts lists only
+    statuses that occur, and urgent_cases counts every urgent case including resolved.
+    """
     sector = _require_str("sector", sector)
     with _session(db) as s:
-        sec = s.get(models.Sector, sector)
-        if sec is None:
+        summ = sector_summary(s, sector)
+        if summ is None:
             raise ValueError(f"sector {sector!r} not found")
-        cases = s.scalars(select(models.Case).where(models.Case.sector == sector)).all()
-        counts: dict[str, int] = {}
-        for c in cases:
-            counts[c.status] = counts.get(c.status, 0) + 1
-        robots = s.scalars(select(models.Robot).where(models.Robot.sector == sector)
-                           .order_by(models.Robot.id)).all()
         units = s.scalars(select(models.Unit).where(models.Unit.sector_id == sector)
                           .order_by(models.Unit.id)).all()
         return {
-            "sector": sec.id, "name": sec.name, "zone_type": sec.zone_type,
-            "case_counts": counts, "total_cases": len(cases),
-            "urgent_cases": sum(1 for c in cases if c.urgent),
+            "sector": summ["sector"], "name": summ["name"], "zone_type": summ["zone_type"],
+            "case_counts": {k: v for k, v in summ["case_counts"].items() if v},
+            "total_cases": summ["total_cases"],
+            "urgent_cases": summ["urgent_cases"],
             "robots": [{"robot_id": r.id, "source": r.source, "last_seen": _iso(r.last_seen)}
-                       for r in robots],
+                       for r in summ["robots"]],
             "units": [{"unit_id": u.id, "name": u.name, "unit_type": u.unit_type,
                        "status": u.status} for u in units],
         }

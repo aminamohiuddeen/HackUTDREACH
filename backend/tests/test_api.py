@@ -314,6 +314,101 @@ def test_list_sectors(client):
     assert {s["id"] for s in sectors} == {"S1", "S2", "S3", "S4"}
 
 
+# --- sector coverage state -----------------------------------------------------
+
+ALL_CASE_STATUSES = {"verify", "ranked", "unverified", "cleared", "dispatched", "resolved"}
+
+
+def _sector(client, sector_id):
+    return next(s for s in client.get("/api/sectors").json() if s["id"] == sector_id)
+
+
+def test_sector_fresh_is_unsearched(client):
+    s = _sector(client, "S2")
+    assert set(s) == {"id", "name", "zone_type", "state", "case_count_by_status",
+                      "urgent_cases", "robot_count", "last_telemetry_at"}
+    assert s["state"] == "unsearched" and s["last_telemetry_at"] is None
+    assert s["case_count_by_status"] == {k: 0 for k in ALL_CASE_STATUSES}
+    assert s["urgent_cases"] == 0 and s["robot_count"] == 0
+
+
+def test_sector_telemetry_no_anomaly_is_cleared(client):
+    """Real path: scenario 1 telemetry (S2, no anomaly) -> classifier marks the case
+    cleared. A cleared case is closed but still counted in case_count_by_status."""
+    import simulator
+
+    for t in simulator.SCENARIOS[1]["telemetry"]:
+        assert client.post("/api/telemetry", json=t).status_code == 201
+    case = client.get("/api/cases").json()
+    assert [c["status"] for c in case] == ["cleared"]  # produced by the classifier
+    s = _sector(client, "S2")
+    assert s["state"] == "cleared"
+    assert s["case_count_by_status"]["cleared"] == 1
+    assert sum(s["case_count_by_status"].values()) == 1
+    assert s["last_telemetry_at"] is not None and s["robot_count"] == 1
+
+
+def test_sector_ranked_urgent_is_urgent(client, seed_scenarios):
+    seed_scenarios(client)  # scenario 2 -> case 2: likely_person/ranked urgent in S1
+    s = _sector(client, "S1")
+    assert s["state"] == "urgent"
+    assert s["urgent_cases"] == 1 and s["case_count_by_status"]["ranked"] == 1
+
+
+def test_sector_only_verify_is_active(client, telemetry_payload):
+    client.post("/api/telemetry", json=telemetry_payload(
+        sector="S3", location_zone="residential", infrared_triggered=True,
+        anomaly_size_cm2=1500.0))
+    s = _sector(client, "S3")
+    assert s["case_count_by_status"]["verify"] == 1
+    assert sum(s["case_count_by_status"].values()) == 1
+    assert s["state"] == "active" and s["urgent_cases"] == 0
+
+
+def test_sector_all_cases_resolved_is_cleared(client, telemetry_payload):
+    r = client.post("/api/telemetry", json=telemetry_payload(
+        sector="S3", location_zone="residential", infrared_triggered=True,
+        anomaly_size_cm2=1500.0))
+    case_id = r.json()["case_id"]
+    assert _sector(client, "S3")["state"] == "active"
+    assert client.patch(f"/api/cases/{case_id}", json={"status": "resolved"}).status_code == 200
+    s = _sector(client, "S3")
+    assert s["state"] == "cleared" and s["case_count_by_status"]["resolved"] == 1
+
+
+def test_sector_dispatched_case_is_active(client, telemetry_payload):
+    r = client.post("/api/telemetry", json=telemetry_payload(
+        sector="S3", location_zone="residential", infrared_triggered=True,
+        anomaly_size_cm2=1500.0))
+    client.patch(f"/api/cases/{r.json()['case_id']}", json={"status": "dispatched"})
+    assert _sector(client, "S3")["state"] == "active"
+
+
+def test_sector_survey_only_urgent_is_urgent_not_unsearched(client):
+    """Regression for the rule order: a survey-only survivor (no robot telemetry) in a
+    fresh sector must surface as urgent, not unsearched."""
+    r = client.post("/api/surveys", json=survey_payload(
+        robot_id="s-only", sector="S3", injured="yes", trapped="yes", immediate_help="yes"))
+    assert r.status_code == 201, r.text
+    s = _sector(client, "S3")
+    assert s["last_telemetry_at"] is None
+    assert s["state"] == "urgent"
+    assert s["urgent_cases"] == 1 and s["case_count_by_status"]["ranked"] == 1
+
+
+def test_sector_urgent_cases_excludes_resolved_but_tool_keeps_audit_count(client,
+                                                                          seed_scenarios):
+    import tools
+
+    seed_scenarios(client)
+    client.patch("/api/cases/2", json={"status": "resolved"})  # the ranked urgent S1 case
+    s = _sector(client, "S1")
+    assert s["urgent_cases"] == 0 and s["state"] == "active"  # case 4 in S1 is unverified
+    tool = tools.get_sector_status("S1")
+    assert tool["urgent_cases"] == 1  # all-urgent-including-resolved, unchanged
+    assert tool["case_counts"] == {"resolved": 1, "unverified": 1}  # zeros dropped
+
+
 def test_list_units(client):
     units = client.get("/api/units").json()
     assert {u["unit_type"] for u in units} == {"EMS", "FIRE", "SAR"}
