@@ -2,7 +2,18 @@
 // NOTE: auth header + Supabase session check bypassed for demo.
 // The adapt* functions below map the actual backend response shape.
 import { buildCases, buildRobots, buildSectors } from "./mock-data";
-import type { NemotronReport, RescueCase, ResponseUnit, Robot, Sector } from "./types";
+import type {
+  CaseStatus,
+  Classification,
+  NemotronReport,
+  QuestionAnswer,
+  RescueCase,
+  ResponseUnit,
+  Robot,
+  Sector,
+  TimelineEvent,
+  Zone,
+} from "./types";
 
 const API_BASE = (import.meta.env["VITE_REACH_API_BASE"] as string | undefined) ?? "";
 export const DEMO_MODE = API_BASE === "";
@@ -99,34 +110,62 @@ function sensorField<T>(value: T | null | undefined): { value: T | null; source:
 // We stash the backend integer on each RescueCase as `backendId` so analyzeCase can find it.
 type RescueCaseWithBackendId = RescueCase & { backendId: number };
 
+const CLASSIFICATIONS: readonly Classification[] = ["likely_person", "possible_person", "object"];
+const STATUSES: readonly CaseStatus[] = ["ranked", "verify", "cleared", "not_ranked", "resolved"];
+
+/** Map any backend classification string onto the frontend enum ("unknown" etc. → object). */
+function toClassification(v: string | null | undefined, fallback: Classification): Classification {
+  if (v === "unknown") return "object";
+  return CLASSIFICATIONS.includes(v as Classification) ? (v as Classification) : fallback;
+}
+
+/** Map any backend status string onto the frontend enum, so STATUS_META lookups never miss. */
+function toStatus(v: string | null | undefined, fallback: CaseStatus): CaseStatus {
+  if (v === "dispatched" || v === "resolved") return "resolved";
+  if (v === "unverified") return "verify";
+  return STATUSES.includes(v as CaseStatus) ? (v as CaseStatus) : fallback;
+}
+
 function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
   const t = raw.telemetry?.[raw.telemetry.length - 1];
   const latestSurvey = raw.surveys?.[raw.surveys.length - 1];
   const answers = latestSurvey?.answers ?? {};
+  const latest = raw.latest_report ?? null;
 
-  const questionnaire = latestSurvey
+  const questionnaire: QuestionAnswer[] | null = latestSurvey
     ? [
-        { questionId: 1, question: "Injured?", answer: answers.injured ?? "—" },
-        { questionId: 2, question: "Trapped?", answer: answers.trapped ?? "—" },
-        { questionId: 3, question: "Breathing difficulty?", answer: answers.breathing_difficulty ?? "—" },
-        { questionId: 4, question: "Others present?", answer: answers.others_present ?? "—" },
-        { questionId: 5, question: "Need immediate help?", answer: answers.immediate_help ?? "—" },
+        { questionId: 1, question: "Injured?", answer: answers["injured"] ?? "—" },
+        { questionId: 2, question: "Trapped?", answer: answers["trapped"] ?? "—" },
+        { questionId: 3, question: "Breathing difficulty?", answer: answers["breathing_difficulty"] ?? "—" },
+        { questionId: 4, question: "Others present?", answer: answers["others_present"] ?? "—" },
+        { questionId: 5, question: "Need immediate help?", answer: answers["immediate_help"] ?? "—" },
       ]
     : null;
 
-  const zone = (t?.location_zone ?? "unknown") as "residential" | "industrial" | "road" | "unknown";
+  const zone = (t?.location_zone ?? "unknown") as Zone;
   const locSource = t?.location?.source === "operator" ? "operator" : "gps";
 
+  // Prefer the latest Nemotron report's verdict when present; fall back to the case row.
+  const caseClassification = toClassification(raw.classification, "object");
+  const caseStatus = toStatus(raw.status, "verify");
+  const classification = toClassification(latest?.classification, caseClassification);
+  const status = toStatus(latest?.status, caseStatus);
+
   const report: NemotronReport = {
-    generatedAt: raw.latest_report?.created_at ?? raw.updated_at,
-    incidentReport:
-      raw.latest_report?.rationale ??
-      `Case ${raw.id}: ${raw.classification} with status ${raw.status}. Run analysis to generate a Nemotron report.`,
-    rationale: raw.latest_report?.rationale ?? "",
+    generatedAt: latest?.created_at ?? raw.updated_at,
+    incidentReport: latest?.rationale ?? `Pending analysis for ${classification}.`,
+    rationale: latest?.rationale ?? "",
     missingData: raw.missing_signals ?? [],
     tools: [],
     nearestUnits: [],
   };
+
+  const events: TimelineEvent[] = [
+    { id: `${raw.id}-created`, at: raw.created_at, actor: "system", title: "Case created", detail: "Telemetry received" },
+  ];
+  if (latest) {
+    events.push({ id: `${raw.id}-report-${latest.report_id}`, at: latest.created_at, actor: "nemotron", title: "Nemotron report generated" });
+  }
 
   return {
     id: `RC-1107-${String(raw.id).padStart(3, "0")}`,
@@ -137,12 +176,17 @@ function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
     locationSource: locSource,
     lat: raw.location?.lat ?? 0,
     lon: raw.location?.lng ?? 0,
-    classification: raw.classification === "unknown" ? "object" : raw.classification,
-    status: raw.status === "dispatched" || raw.status === "resolved" ? "resolved" : raw.status,
+    classification,
+    status,
+    environmentalWarning: null,
+    // The frontend never shows a numeric confidence; evidence is the backend's signal list.
     confidence: {
-      label: raw.confidence >= 0.9 ? "high" : raw.confidence >= 0.6 ? "medium" : "low",
-      evidence: raw.signals ?? [],
-    } as RescueCase["confidence"],
+      label: "Not calibrated",
+      evidence: [...(raw.signals ?? []), ...(latest?.classification ? [`Nemotron: ${latest.classification}`] : [])],
+    },
+    // Safe defaults: the backend does not compute these scores.
+    environmentScore: null,
+    healthScore: null,
     needs: raw.urgent_reasons ?? [],
     sensors: {
       temperatureC: sensorField(t?.temperature_c),
@@ -154,10 +198,14 @@ function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
       anomalyAreaCm2: sensorField(t?.anomaly_size_cm2 ?? null),
     },
     questionnaire,
+    uncertaintyReasons: [...(raw.missing_signals ?? []), ...(latest?.rationale_conflict ?? [])],
+    // Only VERIFY cases enter the human verification queue.
+    verification: status === "verify" ? "pending" : null,
+    dispatchedUnit: undefined,
     detectedAt: raw.created_at,
-    events: [],
+    events,
     report,
-  } as unknown as RescueCaseWithBackendId;
+  };
 }
 
 const adaptCases = (raw: unknown): RescueCaseWithBackendId[] => {
