@@ -37,11 +37,34 @@ def seed_scenarios():
     return run
 
 
+TEST_USER = {"user_id": "test-user", "email": "responder@example.com", "claims": {}}
+
+
 @pytest.fixture
 def client():
+    """Authenticated client: the Supabase check is overridden so API tests exercise
+    business logic. Real token verification is tested in test_auth.py (raw_client)."""
+    from middleware.auth import verify_supabase_token
+
     Base.metadata.drop_all(bind=engine)
     with SessionLocal() as db:
         main.init_db(db)
+    main.app.dependency_overrides[verify_supabase_token] = lambda: TEST_USER
+    try:
+        with TestClient(main.app) as c:
+            yield c
+    finally:
+        main.app.dependency_overrides.pop(verify_supabase_token, None)
+        Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def raw_client():
+    """Client with NO auth override: requests go through real token verification."""
+    Base.metadata.drop_all(bind=engine)
+    with SessionLocal() as db:
+        main.init_db(db)
+    main.app.dependency_overrides.clear()
     with TestClient(main.app) as c:
         yield c
     Base.metadata.drop_all(bind=engine)

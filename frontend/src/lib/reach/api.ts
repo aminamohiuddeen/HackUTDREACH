@@ -1,6 +1,8 @@
 // API adapter for the FastAPI backend.
-// NOTE: auth header + Supabase session check bypassed for demo.
+// Every request carries the user's Supabase access token as a Bearer header;
+// the backend verifies it on all rescue-data endpoints.
 // The adapt* functions below map the actual backend response shape.
+import { supabase } from "@/integrations/supabase/client";
 import { buildCases, buildRobots, buildSectors } from "./mock-data";
 import type {
   CaseStatus,
@@ -22,6 +24,9 @@ async function getJson(path: string, init?: RequestInit): Promise<unknown> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.method === "POST") headers.set("Content-Type", "application/json");
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session) throw new Error("Your session has expired. Please sign in again.");
+  headers.set("Authorization", `Bearer ${data.session.access_token}`);
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) throw new Error(`REACH API ${path} failed: ${res.status}`);
   return res.json();
