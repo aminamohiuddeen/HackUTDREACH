@@ -107,6 +107,7 @@ export function AppShell({ children, account }: { children: ReactNode; account: 
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            {DEMO_MODE && (
             <div className="flex items-center gap-2">
               <FlaskConical className="h-3.5 w-3.5 text-subtle" />
               <Select value={scenario} onValueChange={(v) => dispatch({ type: "scenario", key: v as ScenarioKey })}>
@@ -122,6 +123,7 @@ export function AppShell({ children, account }: { children: ReactNode; account: 
                 </SelectContent>
               </Select>
             </div>
+            )}
             {DEMO_MODE && (
               <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-warning/40 bg-warning/10 px-2.5 py-1 text-xs font-semibold text-warning" title="Simulated data">
                 <span className="h-1.5 w-1.5 rounded-full bg-warning" />

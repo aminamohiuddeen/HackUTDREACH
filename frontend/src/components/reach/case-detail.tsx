@@ -12,6 +12,7 @@ import {
   NearestUnits,
   ProvenanceTag,
   ScoreBadge,
+  SourceBadge,
   StatusBadge,
   Timeline,
   VerificationBadge,
@@ -63,7 +64,7 @@ export function CaseDetail({ c, bare }: { c: RescueCase; bare?: boolean }) {
       {bare ? (
         <div className="flex justify-end">
           <Link to="/intelligence" search={{ id: c.id }} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-            <Sparkles className="h-3.5 w-3.5" /> Nemotron view
+            <Sparkles className="h-3.5 w-3.5" /> AI analysis
           </Link>
         </div>
       ) : (
@@ -71,7 +72,7 @@ export function CaseDetail({ c, bare }: { c: RescueCase; bare?: boolean }) {
           <div className="flex items-center justify-between">
             <span className="font-mono text-lg font-semibold">{c.id}</span>
             <Link to="/intelligence" search={{ id: c.id }} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
-              <Sparkles className="h-3.5 w-3.5" /> Nemotron view
+              <Sparkles className="h-3.5 w-3.5" /> AI analysis
             </Link>
           </div>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -87,7 +88,7 @@ export function CaseDetail({ c, bare }: { c: RescueCase; bare?: boolean }) {
 
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border">
         <Field label="Detected" className="bg-card p-4"><span className="font-mono tabular">{fmtTime(c.detectedAt)}</span></Field>
-        <Field label="Robot" className="bg-card p-4"><span className="font-mono">{c.robotId}</span></Field>
+        <Field label="Robot" className="bg-card p-4"><div className="flex flex-wrap items-center gap-2"><span className="font-mono">{c.robotId}</span><SourceBadge value={c.source} /></div></Field>
         <Field label="Sector / zone" className="bg-card p-4"><span className="font-mono">{c.sectorId}</span> · <span className="capitalize">{c.zone}</span></Field>
         <Field label={`Location · ${c.locationSource === "gps" ? "GPS" : "Operator"}`} className="bg-card p-4"><span className="font-mono text-xs">{fmtCoord(c.lat, c.lon)}</span></Field>
         <Field label="Confidence" className="col-span-2 bg-card p-4"><ConfidenceDisplay value={c.confidence} /></Field>
@@ -102,7 +103,7 @@ export function CaseDetail({ c, bare }: { c: RescueCase; bare?: boolean }) {
       <Disclosure label="Questionnaire" meta={c.questionnaire ? `${c.questionnaire.filter((q) => q.answer).length}/${c.questionnaire.length} answered` : "no response"} defaultOpen>
         <Questionnaire c={c} />
       </Disclosure>
-      <Disclosure label="Nemotron rationale">
+      <Disclosure label="AI rationale · Powered by Nemotron">
         <p className="text-sm leading-relaxed text-muted-foreground">{c.report.rationale}</p>
       </Disclosure>
       <section><NearestUnits units={c.report.nearestUnits} /></section>

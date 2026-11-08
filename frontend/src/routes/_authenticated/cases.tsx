@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronDown, MapPin, MessageSquareOff, Search, X } from "lucide-react";
+import { ChevronDown, Inbox, MapPin, MessageSquareOff, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useReach } from "@/lib/reach/store";
+import { useCaseDetail, useReach } from "@/lib/reach/store";
 import { fmtCoord, fmtTime } from "@/lib/reach/format";
 import { hasValidSurvey } from "@/lib/reach/classify";
 import type { CaseStatus, Classification, RescueCase } from "@/lib/reach/types";
 import { Input } from "@/components/ui/input";
-import { ClassificationBadge, EmptyState, EnvWarning, PageHeader, ScoreBadge, StatusBadge, VerificationBadge } from "@/components/reach/primitives";
+import { ClassificationBadge, ConfidenceScore, EmptyState, EnvWarning, PageHeader, ScoreBadge, SourceBadge, StatusBadge, VerificationBadge } from "@/components/reach/primitives";
 import { CaseDetail } from "@/components/reach/case-detail";
 
 export const Route = createFileRoute("/_authenticated/cases")({
@@ -35,6 +35,7 @@ const ORDER: Record<CaseStatus, number> = { ranked: 0, verify: 1, not_ranked: 2,
 function Cases() {
   const { cases } = useReach();
   const { id } = Route.useSearch();
+  useCaseDetail(id);
   const navigate = useNavigate({ from: "/cases" });
   const [q, setQ] = useState("");
   const [cls, setCls] = useState<Classification | "all">("all");
@@ -74,7 +75,11 @@ function Cases() {
         ))}
         {rows.length === 0 && (
           <div className="panel">
-            <EmptyState icon={Search} title="No cases match" message="Try clearing the search or widening the classification and status filters." />
+            {cases.length === 0 ? (
+              <EmptyState icon={Inbox} title="No active cases at this time" message="New cases appear here automatically as robots report detections." />
+            ) : (
+              <EmptyState icon={Search} title="No cases match" message="Try clearing the search or widening the classification and status filters." />
+            )}
           </div>
         )}
       </div>
@@ -90,8 +95,10 @@ function CaseCard({ c, open, onToggle }: { c: RescueCase; open: boolean; onToggl
       <button onClick={onToggle} aria-expanded={open} className="block w-full px-5 py-4 text-left transition-colors hover:bg-panel-raised/60">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="font-mono text-sm font-semibold">{c.id}</span>
+          <SourceBadge value={c.source} />
           <ClassificationBadge value={c.classification} />
           <StatusBadge value={c.status} />
+          <ConfidenceScore value={c.confidence} />
           <ScoreBadge label="Environment" value={c.environmentScore} />
           <ScoreBadge label="Health" value={c.healthScore} />
           {c.verification && <VerificationBadge value={c.verification} />}

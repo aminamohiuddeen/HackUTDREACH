@@ -3,13 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { AlertOctagon, CheckCircle2, Clock, Info, MapPin, Radar, Ruler, ScanSearch, UserCheck, Wind, XCircle, MessageSquareOff, MessageSquareText } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useReach } from "@/lib/reach/store";
+import { useCaseDetail, useReach } from "@/lib/reach/store";
 import { fmtCoord, fmtTime } from "@/lib/reach/format";
 import { hasValidSurvey } from "@/lib/reach/classify";
 import type { RescueCase, VerificationOutcome } from "@/lib/reach/types";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ClassificationBadge, Disclosure, PageHeader, Panel, PanelHeader, ProvenanceTag, StatusBadge, Timeline, VerificationBadge } from "@/components/reach/primitives";
+import { ClassificationBadge, Disclosure, fmtConfidence, PageHeader, Panel, PanelHeader, ProvenanceTag, StatusBadge, Timeline, VerificationBadge } from "@/components/reach/primitives";
 
 export const Route = createFileRoute("/_authenticated/verify")({
   head: () => ({
@@ -31,6 +31,7 @@ function VerifyQueue() {
   const queue = cases.filter((c) => c.verification !== null);
   const [id, setId] = useState(queue.find((c) => c.status === "verify")?.id ?? queue[0]?.id);
   const c = queue.find((x) => x.id === id);
+  useCaseDetail(c?.id);
   const open = queue.filter((x) => x.status === "verify").length;
 
   return (
@@ -70,7 +71,7 @@ const TIMELINE_FILTERS: { key: TimelineFilterKey; label: string; match: (a: stri
   { key: "all", label: "All", match: () => true },
   { key: "human", label: "Human decisions", match: (a) => a === "operator" },
   { key: "robot", label: "Robot", match: (a) => a === "robot" },
-  { key: "nemotron", label: "Nemotron", match: (a) => a === "nemotron" || a === "system" },
+  { key: "nemotron", label: "AI analysis", match: (a) => a === "nemotron" || a === "system" },
 ];
 
 function VerifyDetail({ c, sectorCoverage }: { c: RescueCase; sectorCoverage: string }) {
@@ -110,7 +111,7 @@ function VerifyDetail({ c, sectorCoverage }: { c: RescueCase; sectorCoverage: st
                 <span className="text-subtle">·</span> <span className="rounded-sm border px-1 font-mono text-xs uppercase">{c.locationSource}</span>
               </div>
             </div>
-            <span className="font-mono text-xs text-subtle">Confidence: {c.confidence.label}</span>
+            <span className="font-mono text-xs text-subtle">Confidence: {fmtConfidence(c.confidence)}</span>
           </div>
 
           <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">

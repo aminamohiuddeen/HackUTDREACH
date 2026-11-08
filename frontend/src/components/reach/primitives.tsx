@@ -14,6 +14,8 @@ import {
   User,
   Box,
   Search,
+  Cpu,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fmtTime } from "@/lib/reach/format";
@@ -21,6 +23,7 @@ import type {
   CaseStatus,
   Classification,
   Confidence,
+  DataSource,
   Provenance,
   ResponseUnit,
   Score,
@@ -149,12 +152,53 @@ export function VerificationBadge({ value }: { value: VerificationOutcome }) {
   return <Pill tone={m.tone}>{m.label}</Pill>;
 }
 
+/** "95%" when the backend supplied a score; "Unknown" otherwise (never a made-up number). */
+export function fmtConfidence(value: Confidence | undefined): string {
+  const score = value?.score;
+  return typeof score === "number" && Number.isFinite(score) ? `${Math.round(score * 100)}%` : "Unknown";
+}
+
+/** Compact confidence indicator for case cards: label, percentage and a thin bar. */
+export function ConfidenceScore({ value }: { value: Confidence | undefined }) {
+  const score = value?.score;
+  const known = typeof score === "number" && Number.isFinite(score);
+  const pct = known ? Math.max(0, Math.min(100, Math.round(score * 100))) : 0;
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground" title="Classifier confidence">
+      <span className="text-subtle">Confidence</span>
+      {known ? (
+        <>
+          <span className="h-1.5 w-12 overflow-hidden rounded-full bg-muted" aria-hidden>
+            <span className="block h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+          </span>
+          <span className="font-mono font-medium text-foreground tabular">{pct}%</span>
+        </>
+      ) : (
+        <span className="font-mono">Unknown</span>
+      )}
+    </span>
+  );
+}
+
+const SOURCE_META: Record<DataSource, { label: string; tone: Tone; icon: typeof User }> = {
+  simulator: { label: "Simulated", tone: "neutral", icon: FlaskConical },
+  hardware: { label: "Live Hardware", tone: "success", icon: Cpu },
+};
+
+/** Where a case's data came from. Renders nothing for demo seed data (no source). */
+export function SourceBadge({ value }: { value: DataSource | undefined }) {
+  if (!value) return null;
+  const m = SOURCE_META[value];
+  if (!m) return null;
+  return <Pill tone={m.tone} icon={m.icon}>{m.label}</Pill>;
+}
+
 export function ConfidenceDisplay({ value, compact }: { value: Confidence; compact?: boolean }) {
   return (
     <div className="space-y-1.5">
       <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
         <CircleDashed className="h-3 w-3" />
-        {value.label}
+        {fmtConfidence(value)}
       </span>
       {!compact && value.evidence.length > 0 && (
         <ul className="space-y-0.5 text-xs text-muted-foreground">
@@ -204,7 +248,7 @@ export function NearestUnits({ units }: { units: ResponseUnit[] }) {
                 <span className="font-mono text-sm font-medium">{u.id}</span>
                 <span className="rounded-sm border px-1.5 font-mono text-xs text-subtle">{u.type}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{u.availability ?? <span className="text-subtle">Availability not supplied</span>}</span>
-                <span className="w-16 text-right font-mono text-sm tabular">{u.distanceKm.toFixed(1)} km</span>
+                <span className="w-16 text-right font-mono text-sm tabular">{u.distanceMi.toFixed(1)} mi</span>
               </li>
             );
           })}

@@ -87,7 +87,8 @@ type BackendAnalyzeResponse = {
     status: string;
     risk_level: string;
     needs: string[];
-    nearest_relevant_units: { unit_id: string; name: string; unit_type: string; distance_km: number }[];
+    // distance_mi from the miles-aware backend; distance_km kept for older backends.
+    nearest_relevant_units: { unit_id: string; name: string; unit_type: string; distance_mi?: number; distance_km?: number }[];
     protocol_cited: string;
     rationale: string;
     rationale_conflict: string[];
@@ -126,11 +127,16 @@ function toStatus(v: string | null | undefined, fallback: CaseStatus): CaseStatu
   return STATUSES.includes(v as CaseStatus) ? (v as CaseStatus) : fallback;
 }
 
-function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
+/**
+ * Fields derived from the latest telemetry row and survey. GET /api/cases (CaseOut) omits
+ * telemetry/surveys, so these come back "unavailable" until GET /api/cases/{id} (CaseDetail) is fetched.
+ */
+type TelemetryFields = Pick<RescueCase, "sensors" | "questionnaire" | "zone" | "locationSource">;
+
+function adaptTelemetryFields(raw: Pick<BackendCase, "telemetry" | "surveys">): TelemetryFields {
   const t = raw.telemetry?.[raw.telemetry.length - 1];
   const latestSurvey = raw.surveys?.[raw.surveys.length - 1];
   const answers = latestSurvey?.answers ?? {};
-  const latest = raw.latest_report ?? null;
 
   const questionnaire: QuestionAnswer[] | null = latestSurvey
     ? [
@@ -142,8 +148,25 @@ function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
       ]
     : null;
 
-  const zone = (t?.location_zone ?? "unknown") as Zone;
-  const locSource = t?.location?.source === "operator" ? "operator" : "gps";
+  return {
+    sensors: {
+      temperatureC: sensorField(t?.temperature_c),
+      irTriggered: sensorField(t?.infrared_triggered),
+      waterDetected: sensorField(t?.water_detected),
+      motionDetected: sensorField(t?.motion_detected),
+      accel: sensorField(t?.accelerometer),
+      gyro: sensorField(t?.gyroscope),
+      anomalyAreaCm2: sensorField(t?.anomaly_size_cm2 ?? null),
+    },
+    questionnaire,
+    zone: (t?.location_zone ?? "unknown") as Zone,
+    locationSource: t?.location?.source === "operator" ? "operator" : "gps",
+  };
+}
+
+function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
+  const { sensors, questionnaire, zone, locationSource: locSource } = adaptTelemetryFields(raw);
+  const latest = raw.latest_report ?? null;
 
   // Prefer the latest Nemotron report's verdict when present; fall back to the case row.
   const caseClassification = toClassification(raw.classification, "object");
@@ -180,23 +203,17 @@ function adaptOneCase(raw: BackendCase): RescueCaseWithBackendId {
     status,
     environmentalWarning: null,
     // The frontend never shows a numeric confidence; evidence is the backend's signal list.
+    source: raw.source === "hardware" ? "hardware" : raw.source === "simulator" ? "simulator" : undefined,
     confidence: {
       label: "Not calibrated",
+      score: typeof raw.confidence === "number" && Number.isFinite(raw.confidence) ? raw.confidence : null,
       evidence: [...(raw.signals ?? []), ...(latest?.classification ? [`Nemotron: ${latest.classification}`] : [])],
     },
     // Safe defaults: the backend does not compute these scores.
     environmentScore: null,
     healthScore: null,
     needs: raw.urgent_reasons ?? [],
-    sensors: {
-      temperatureC: sensorField(t?.temperature_c),
-      irTriggered: sensorField(t?.infrared_triggered),
-      waterDetected: sensorField(t?.water_detected),
-      motionDetected: sensorField(t?.motion_detected),
-      accel: sensorField(t?.accelerometer),
-      gyro: sensorField(t?.gyroscope),
-      anomalyAreaCm2: sensorField(t?.anomaly_size_cm2 ?? null),
-    },
+    sensors,
     questionnaire,
     uncertaintyReasons: [...(raw.missing_signals ?? []), ...(latest?.rationale_conflict ?? [])],
     // Only VERIFY cases enter the human verification queue.
@@ -213,6 +230,13 @@ const adaptCases = (raw: unknown): RescueCaseWithBackendId[] => {
   const list = Array.isArray(arr) ? arr : (arr.value ?? []);
   return list.map(adaptOneCase);
 };
+
+const KM_TO_MI = 0.621371;
+/** Prefer the backend's distance_mi; convert distance_km from older backends. Rounded to 0.1 mi. */
+function toMiles(u: { distance_mi?: number; distance_km?: number }): number {
+  const mi = typeof u.distance_mi === "number" ? u.distance_mi : typeof u.distance_km === "number" ? u.distance_km * KM_TO_MI : 0;
+  return Math.round(mi * 10) / 10;
+}
 
 const adaptReport = (raw: unknown): NemotronReport => {
   const body = raw as BackendAnalyzeResponse;
@@ -233,7 +257,7 @@ const adaptReport = (raw: unknown): NemotronReport => {
     nearestUnits: (r?.nearest_relevant_units ?? []).map((u) => ({
       id: u.unit_id,
       type: u.unit_type as "EMS" | "FIRE" | "SAR",
-      distanceKm: u.distance_km,
+      distanceMi: toMiles(u),
       availability: undefined,
     })),
   } as unknown as NemotronReport;
@@ -266,6 +290,17 @@ export const reachApi = {
     const seen = new Map<string, ResponseUnit>();
     buildCases().forEach((c) => c.report.nearestUnits.forEach((u) => seen.set(u.id, u)));
     return [...seen.values()];
+  },
+  /**
+   * Fetches GET /api/cases/{id} (CaseDetail) for the telemetry/survey-derived fields that the
+   * list endpoint omits. Returns only those fields, to merge into the stored case.
+   */
+  async getCaseDetail(id: string): Promise<Partial<RescueCase>> {
+    if (DEMO_MODE) return {}; // mock cases already carry full details
+    const backendId = Number(id.replace(/^RC-1107-/, ""));
+    if (!Number.isFinite(backendId)) return {};
+    const raw = (await getJson(`/api/cases/${backendId}`)) as BackendCase;
+    return adaptTelemetryFields(raw);
   },
   async analyzeCase(id: string, current: NemotronReport): Promise<NemotronReport> {
     if (!DEMO_MODE) {
