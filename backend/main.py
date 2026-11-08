@@ -16,16 +16,21 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import sys
 from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import httpx
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import config
+import hardware_sync
 import models
 import tools
 from agents.classifier import classify_case, survey_responded
@@ -228,6 +233,14 @@ def get_case_or_404(db: Session, case_id: int) -> models.Case:
 
 RequireUser = [Depends(verify_supabase_token)]
 
+# Local testing only: REACH_AUTH_DISABLED=1 (backend/.env) skips Supabase verification on the
+# dashboard routes and treats every request as a demo user. Never set it in a deployment.
+if os.getenv("REACH_AUTH_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+    app.dependency_overrides[verify_supabase_token] = lambda: {
+        "user_id": "demo", "email": None, "claims": {}}
+    print("WARNING: REACH_AUTH_DISABLED is set - API auth is OFF (local testing only)",
+          file=sys.stderr)
+
 
 # --- Endpoints ---------------------------------------------------------------
 
@@ -397,3 +410,66 @@ def list_sectors(db: Session = Depends(get_db)):
 @app.get("/api/units", response_model=list[UnitOut], dependencies=RequireUser)
 def list_units(db: Session = Depends(get_db)):
     return db.scalars(select(models.Unit).order_by(models.Unit.id)).all()
+
+
+# --- Hardware bridge ---------------------------------------------------------
+
+# Entries already ingested ("t:<unit>:<received_at>" / "s:<case_id>:<received_at>").
+# In-memory: after a restart the pod server's latest entries are ingested once more.
+_hardware_seen: set[str] = set()
+
+
+@app.get("/api/sync-hardware", dependencies=RequireUser)
+def sync_hardware(db: Session = Depends(get_db)):
+    """Pull the rescue pod's latest data from the hardware test server (/state) and ingest it as
+    source=hardware telemetry and surveys. Readings the pod cannot provide are simulated and
+    listed in `simulated_fields`. Safe to call repeatedly: already-ingested entries are skipped."""
+    try:
+        state = hardware_sync.fetch_state()
+    except (httpx.HTTPError, ValueError) as e:
+        raise HTTPException(status_code=502, detail=f"Hardware server unreachable: {e}")
+
+    rng = random.Random()
+    out = {"telemetry_ingested": 0, "surveys_ingested": 0, "skipped_duplicates": 0,
+           "case_ids": [], "simulated_fields": {}, "errors": []}
+
+    telemetry = state.get("latest_telemetry")
+    for unit_id, data in (telemetry.items() if isinstance(telemetry, dict) else []):
+        if not isinstance(data, dict):
+            continue
+        key = f"t:{unit_id}:{data.get('received_at')}"
+        if key in _hardware_seen:
+            out["skipped_duplicates"] += 1
+            continue
+        try:
+            payload, simulated = hardware_sync.pod_telemetry(str(unit_id), data, rng)
+        except ValidationError as e:
+            out["errors"].append(f"telemetry {unit_id}: {e.errors()[0]['msg']}")
+            continue
+        ack = post_telemetry(payload, source="hardware", db=db)
+        _hardware_seen.add(key)
+        out["telemetry_ingested"] += 1
+        out["simulated_fields"][payload.robot_id] = simulated
+        if ack.case_id not in out["case_ids"]:
+            out["case_ids"].append(ack.case_id)
+
+    cases = state.get("cases")
+    for case in (cases if isinstance(cases, list) else []):
+        if not isinstance(case, dict):
+            continue
+        key = f"s:{case.get('case_id')}:{case.get('received_at')}"
+        if key in _hardware_seen:
+            out["skipped_duplicates"] += 1
+            continue
+        try:
+            payload = hardware_sync.pod_survey(case)
+        except ValidationError as e:
+            out["errors"].append(f"survey {case.get('case_id')}: {e.errors()[0]['msg']}")
+            continue
+        ack = post_survey(payload, source="hardware", db=db)
+        _hardware_seen.add(key)
+        out["surveys_ingested"] += 1
+        if ack.case_id not in out["case_ids"]:
+            out["case_ids"].append(ack.case_id)
+
+    return out
