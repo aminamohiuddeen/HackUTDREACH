@@ -471,7 +471,11 @@ def ingest_hardware_state(state: dict, db: Session) -> dict:
             if not isinstance(case, dict):
                 continue
             key = f"s:{case.get('case_id')}:{case.get('received_at')}"
-            if key in _hardware_seen:
+            # Surveys are also checked against the DB: the pod server keeps every survey it
+            # received, so after a backend restart they would otherwise be imported again.
+            if key in _hardware_seen or db.scalar(
+                    select(models.HardwareIngest.key).where(models.HardwareIngest.key == key)):
+                _hardware_seen.add(key)
                 out["skipped_duplicates"] += 1
                 continue
             try:
@@ -480,6 +484,8 @@ def ingest_hardware_state(state: dict, db: Session) -> dict:
                 out["errors"].append(f"survey {case.get('case_id')}: {e.errors()[0]['msg']}")
                 continue
             ack = post_survey(payload, source="hardware", db=db)
+            db.add(models.HardwareIngest(key=key))
+            db.commit()
             _hardware_seen.add(key)
             out["surveys_ingested"] += 1
             if ack.case_id not in out["case_ids"]:

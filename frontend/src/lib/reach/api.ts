@@ -135,7 +135,7 @@ function toStatus(v: string | null | undefined, fallback: CaseStatus): CaseStatu
  * Fields derived from the latest telemetry row and survey. GET /api/cases (CaseOut) omits
  * telemetry/surveys, so these come back "unavailable" until GET /api/cases/{id} (CaseDetail) is fetched.
  */
-type TelemetryFields = Pick<RescueCase, "sensors" | "questionnaire" | "zone" | "locationSource">;
+type TelemetryFields = Pick<RescueCase, "sensors" | "questionnaire" | "questionnaireMeta" | "zone" | "locationSource">;
 
 function adaptTelemetryFields(raw: Pick<BackendCase, "telemetry" | "surveys">): TelemetryFields {
   const t = raw.telemetry?.[raw.telemetry.length - 1];
@@ -162,6 +162,9 @@ function adaptTelemetryFields(raw: Pick<BackendCase, "telemetry" | "surveys">): 
       anomalyAreaCm2: sensorField(t?.anomaly_size_cm2 ?? null),
     },
     questionnaire,
+    questionnaireMeta: latestSurvey
+      ? { receivedAt: latestSurvey.timestamp, total: raw.surveys?.length ?? 1 }
+      : undefined,
     zone: (t?.location_zone ?? "unknown") as Zone,
     locationSource: t?.location?.source === "operator" ? "operator" : "gps",
   };

@@ -67,6 +67,15 @@ def test_sync_skips_already_ingested_entries(client, pod_state):
     assert again["skipped_duplicates"] == 2
 
 
+def test_restart_does_not_reimport_saved_surveys(client, pod_state):
+    first = client.get("/api/sync-hardware").json()
+    main._hardware_seen.clear()  # what a backend restart does to the in-memory cache
+    again = client.get("/api/sync-hardware").json()
+    assert again["surveys_ingested"] == 0
+    case = client.get(f"/api/cases/{first['case_ids'][0]}").json()
+    assert len(case["surveys"]) == 1
+
+
 def test_sync_unreachable_hardware_is_502(client, monkeypatch):
     def boom(*a, **k):
         raise httpx.ConnectError("no route")

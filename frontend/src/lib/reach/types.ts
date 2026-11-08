@@ -126,6 +126,8 @@ export interface RescueCase {
   needs: string[];
   sensors: SensorSnapshot;
   questionnaire: QuestionAnswer[] | null;
+  /** When the latest questionnaire response arrived and how many this case has (live mode). */
+  questionnaireMeta?: { receivedAt: string; total: number } | undefined;
   uncertaintyReasons: string[];
   verification: VerificationOutcome | null; // null when the case never entered VERIFY
   /** Set only when a human operator confirms a unit to send. REACH never dispatches itself. */

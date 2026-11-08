@@ -137,3 +137,12 @@ class ToolLog(Base):
     args_json: Mapped[dict] = mapped_column(JSON, default=dict)
     observation_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
+
+
+class HardwareIngest(Base):
+    """A pod-server /state entry already ingested ("s:<case_id>:<received_at>"), so a backend
+    restart does not re-import surveys still listed on the pod server."""
+    __tablename__ = "hardware_ingests"
+
+    key: Mapped[str] = mapped_column(String, primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

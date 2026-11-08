@@ -53,6 +53,12 @@ export function Questionnaire({ c }: { c: RescueCase }) {
           <span className={q.answer ? "font-medium" : "text-subtle"}>{q.answer ?? "—"}</span>
         </li>
       ))}
+      {c.questionnaireMeta && (
+        <li className="pt-1 text-xs text-subtle">
+          Latest response {fmtTime(c.questionnaireMeta.receivedAt)} ·{" "}
+          {c.questionnaireMeta.total} {c.questionnaireMeta.total === 1 ? "response" : "responses"} total
+        </li>
+      )}
     </ol>
   );
 }
@@ -99,7 +105,7 @@ export function CaseDetail({ c, bare }: { c: RescueCase; bare?: boolean }) {
       <Disclosure label="Sensor readings" meta="9 channels">
         <SensorTable s={c.sensors} />
       </Disclosure>
-      <Disclosure label="Questionnaire" meta={c.questionnaire ? `${c.questionnaire.filter((q) => q.answer).length}/${c.questionnaire.length} answered` : "no response"} defaultOpen>
+      <Disclosure label="Questionnaire" meta={c.questionnaireMeta ? `updated ${fmtTime(c.questionnaireMeta.receivedAt)}` : c.questionnaire ? `${c.questionnaire.filter((q) => q.answer).length}/${c.questionnaire.length} answered` : "no response"} defaultOpen>
         <Questionnaire c={c} />
       </Disclosure>
       <Disclosure label="AI rationale · Powered by Nemotron">
