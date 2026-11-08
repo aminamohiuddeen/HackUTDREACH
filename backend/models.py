@@ -37,6 +37,8 @@ class Unit(Base):
     unit_type: Mapped[str] = mapped_column(String)  # EMS | FIRE | SAR
     status: Mapped[str] = mapped_column(String, default="available")
     sector_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class Case(Base):

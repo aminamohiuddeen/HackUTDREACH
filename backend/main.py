@@ -50,12 +50,15 @@ SEED_SECTORS = [
     ("S3", "Central Corridor", "road"),
     ("S4", "South Residential", "residential"),
 ]
+# (id, name, type, sector, lat, lng). Placed relative to simulator scenarios:
+# EMS-1 nearest scenario 2 (ranked survivor, 32.9855,-96.7502), FIRE-1 nearest
+# scenario 3 (residential verify, 32.9710,-96.7555), SAR-1 farther out.
 SEED_UNITS = [
-    ("EMS-1", "Medic 1", "EMS", "S1"),
-    ("EMS-2", "Medic 2", "EMS", "S4"),
-    ("FIRE-1", "Engine 1", "FIRE", "S2"),
-    ("SAR-1", "Search & Rescue 1", "SAR", "S1"),
-    ("SAR-2", "Search & Rescue 2", "SAR", "S3"),
+    ("EMS-1", "Medic 1", "EMS", "S1", 32.9840, -96.7515),
+    ("EMS-2", "Medic 2", "EMS", "S4", 32.9765, -96.7420),
+    ("FIRE-1", "Engine 1", "FIRE", "S2", 32.9700, -96.7540),
+    ("SAR-1", "Search & Rescue 1", "SAR", "S1", 33.0060, -96.7330),
+    ("SAR-2", "Search & Rescue 2", "SAR", "S3", 32.9950, -96.7620),
 ]
 
 
@@ -64,7 +67,8 @@ def init_db(db: Session) -> None:
     if db.scalar(select(models.Sector).limit(1)) is None:
         db.add_all(models.Sector(id=i, name=n, zone_type=z) for i, n, z in SEED_SECTORS)
     if db.scalar(select(models.Unit).limit(1)) is None:
-        db.add_all(models.Unit(id=i, name=n, unit_type=t, sector_id=s) for i, n, t, s in SEED_UNITS)
+        db.add_all(models.Unit(id=i, name=n, unit_type=t, sector_id=s, lat=la, lng=ln)
+                   for i, n, t, s, la, ln in SEED_UNITS)
     db.commit()
 
 

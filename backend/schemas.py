@@ -177,3 +177,5 @@ class UnitOut(ORMModel):
     unit_type: Literal["EMS", "FIRE", "SAR"]
     status: str
     sector_id: str | None
+    lat: float | None = None
+    lng: float | None = None

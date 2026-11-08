@@ -10,10 +10,18 @@ cp .env.example .env
 uvicorn main:app --reload        # http://localhost:8000/docs
 pytest                           # tests
 python simulator.py --scenario all   # needs the server running
+python scripts/reset_db.py           # delete reach.db and reseed (stop the server first)
 ```
+
+> **Schema change (units now have `lat`/`lng`):** delete backend/reach.db before
+> first run after this change. `python scripts/reset_db.py` does this and reseeds
+> in one command. `create_all` does not alter existing tables.
 
 Env: `FRONTEND_ORIGIN` (CORS; comma-separated list allowed), `DATABASE_URL`
 (default `sqlite:///./reach.db`).
+`NVIDIA_API_KEY` / `NVIDIA_MODEL` configure Nemotron (`nemotron.py`). With no key
+(or the `.env.example` placeholder), `nemotron.mock_mode()` is true and
+`chat_with_tools()` returns a deterministic stub of the same shape.
 
 ## Data source labelling (simulator vs. hardware)
 

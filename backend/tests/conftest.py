@@ -20,6 +20,15 @@ def client():
 
 
 @pytest.fixture
+def db():
+    Base.metadata.drop_all(bind=engine)
+    with SessionLocal() as s:
+        main.init_db(s)
+        yield s
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
 def telemetry_payload():
     def make(**overrides):
         body = {
