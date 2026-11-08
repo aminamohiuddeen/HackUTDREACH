@@ -72,6 +72,8 @@ type BackendTelemetry = {
 type BackendSurvey = {
   id: number;
   answers: Record<string, string>;
+  /** The rescue pod's own answers, which the yes/no answers flatten. */
+  details?: { people_count?: number; can_move?: boolean; needs_water_or_medication?: boolean } | null;
   timestamp: string;
 };
 
@@ -137,18 +139,38 @@ function toStatus(v: string | null | undefined, fallback: CaseStatus): CaseStatu
  */
 type TelemetryFields = Pick<RescueCase, "sensors" | "questionnaire" | "questionnaireMeta" | "zone" | "locationSource">;
 
+/** "yes" + "7 people with them" -> "yes · 7 people with them". */
+function withDetail(answer: string | undefined, detail: string | null): string {
+  const a = answer ?? "—";
+  return detail ? `${a} · ${detail}` : a;
+}
+
 function adaptTelemetryFields(raw: Pick<BackendCase, "telemetry" | "surveys">): TelemetryFields {
   const t = raw.telemetry?.[raw.telemetry.length - 1];
   const latestSurvey = raw.surveys?.[raw.surveys.length - 1];
   const answers = latestSurvey?.answers ?? {};
+  const details = latestSurvey?.details ?? undefined;
 
   const questionnaire: QuestionAnswer[] | null = latestSurvey
     ? [
         { questionId: 1, question: "Injured?", answer: answers["injured"] ?? "—" },
-        { questionId: 2, question: "Trapped?", answer: answers["trapped"] ?? "—" },
+        {
+          questionId: 2,
+          question: "Trapped?",
+          answer: withDetail(answers["trapped"], details?.can_move === undefined ? null : details.can_move ? "can move on their own" : "can't move on their own"),
+        },
         { questionId: 3, question: "Breathing difficulty?", answer: answers["breathing_difficulty"] ?? "—" },
-        { questionId: 4, question: "Others present?", answer: answers["others_present"] ?? "—" },
-        { questionId: 5, question: "Need immediate help?", answer: answers["immediate_help"] ?? "—" },
+        {
+          questionId: 4,
+          question: "Others present?",
+          answer: withDetail(answers["others_present"], details?.people_count === undefined ? null : `${details.people_count} ${details.people_count === 1 ? "person" : "people"} with them`),
+        },
+        {
+          questionId: 5,
+          // The pod asks about water or medication; other sources ask about immediate help.
+          question: details?.needs_water_or_medication === undefined ? "Need immediate help?" : "Needs water or medication?",
+          answer: answers["immediate_help"] ?? "—",
+        },
       ]
     : null;
 

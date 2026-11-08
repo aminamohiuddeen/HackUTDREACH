@@ -100,6 +100,32 @@ def test_real_readings_are_not_overwritten_by_simulation():
     assert payload.anomaly_size_cm2 is None and payload.heart_rate_bpm is None
 
 
+def test_sync_keeps_the_pods_own_answers_as_details(client, pod_state):
+    body = client.get("/api/sync-hardware").json()
+    survey = client.get(f"/api/cases/{body['case_ids'][0]}").json()["surveys"][-1]
+    assert survey["details"] == {"people_count": 2, "can_move": False,
+                                 "needs_water_or_medication": True}
+
+
+def test_survey_details_are_optional_and_validated(client):
+    base = {"robot_id": "d1", "sector": "S1", "answers": {"injured": "yes"}}
+    case_id = client.post("/api/surveys", json=base).json()["case_id"]
+    assert client.get(f"/api/cases/{case_id}").json()["surveys"][-1]["details"] is None
+    bad = {**base, "details": {"people_count": -1}}
+    assert client.post("/api/surveys", json=bad).status_code == 422
+
+
+def test_older_database_gains_the_details_column():
+    from sqlalchemy import create_engine, inspect, text
+
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:  # surveys table as it shipped, before `details`
+        conn.execute(text("CREATE TABLE surveys (id INTEGER PRIMARY KEY, answers JSON)"))
+    main.add_missing_columns(engine)
+    main.add_missing_columns(engine)  # idempotent
+    assert "details" in {c["name"] for c in inspect(engine).get_columns("surveys")}
+
+
 def test_survey_unanswered_questions_stay_unknown():
     s = hardware_sync.pod_survey({"unit_id": "REACH-01", "survey": {"injured": False}})
     assert s.answers.injured == "no"

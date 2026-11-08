@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import httpx
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 from sqlalchemy.orm import Session
 
 import config
@@ -81,8 +81,23 @@ SEED_UNITS = [
 ]
 
 
+# Columns added after a table first shipped: create_all does not alter existing tables,
+# so an older reach.db gets them here. (table, column, SQL type)
+ADDED_COLUMNS = [("surveys", "details", "JSON")]
+
+
+def add_missing_columns(bind) -> None:
+    insp = inspect(bind)
+    with bind.begin() as conn:
+        for table, column, sql_type in ADDED_COLUMNS:
+            if table in insp.get_table_names() and column not in {
+                    c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}"))
+
+
 def init_db(db: Session) -> None:
     Base.metadata.create_all(bind=db.get_bind())
+    add_missing_columns(db.get_bind())
     if db.scalar(select(models.Sector).limit(1)) is None:
         db.add_all(models.Sector(id=i, name=n, zone_type=z) for i, n, z in SEED_SECTORS)
     if db.scalar(select(models.Unit).limit(1)) is None:
@@ -334,6 +349,7 @@ def post_survey(payload: SurveyIn, source: str = Depends(get_source),
         robot_id=payload.robot_id,
         sector=payload.sector,
         answers=payload.answers.model_dump(),
+        details=payload.details.model_dump(exclude_none=True) or None if payload.details else None,
         timestamp=payload.timestamp or utcnow(),
         source=source,
     )

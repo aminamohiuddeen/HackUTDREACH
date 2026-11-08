@@ -106,6 +106,7 @@ class Survey(Base):
     robot_id: Mapped[str] = mapped_column(String, index=True)
     sector: Mapped[str] = mapped_column(String)
     answers: Mapped[dict] = mapped_column(JSON)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)
     source: Mapped[str] = mapped_column(String)
     received_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -58,10 +58,19 @@ class SurveyAnswers(BaseModel):
     immediate_help: YesNoUnknown = "unknown"
 
 
+class SurveyDetails(BaseModel):
+    """What the survivor actually entered, where the yes/no answers lose detail (rescue pod).
+    Shown to responders and the coordinator; classification uses `answers` only."""
+    people_count: int | None = Field(None, ge=0)  # "How many people are with you?"
+    can_move: bool | None = None  # "Can you move on your own?" (trapped = not can_move)
+    needs_water_or_medication: bool | None = None  # pod's question behind immediate_help
+
+
 class SurveyIn(BaseModel):
     robot_id: str = Field(min_length=1)
     sector: str = Field(min_length=1)
     answers: SurveyAnswers
+    details: SurveyDetails | None = None
     timestamp: datetime | None = None
 
 
@@ -105,6 +114,7 @@ class SurveyOut(ORMModel):
     robot_id: str
     sector: str
     answers: SurveyAnswers
+    details: SurveyDetails | None = None
     timestamp: datetime
     source: Source
 

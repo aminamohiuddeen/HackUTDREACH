@@ -117,4 +117,11 @@ def pod_survey(case: dict, default_unit: str = "REACH-01") -> SurveyIn:
             "breathing_difficulty": _yes_no(sv.get("hard_to_breathe")),
             "immediate_help": _yes_no(sv.get("needs_water_or_medication")),
         },
+        # The pod's own answers, which the yes/no mapping above flattens.
+        details={
+            "people_count": None if people is None else max(0, int(people)),
+            "can_move": None if can_move is None else bool(can_move),
+            "needs_water_or_medication": (None if sv.get("needs_water_or_medication") is None
+                                          else bool(sv.get("needs_water_or_medication"))),
+        },
     )

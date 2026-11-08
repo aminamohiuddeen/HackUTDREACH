@@ -85,6 +85,7 @@ def _telemetry_dict(t: models.Telemetry) -> dict:
 
 def _survey_dict(s: models.Survey) -> dict:
     return {"id": s.id, "robot_id": s.robot_id, "sector": s.sector, "answers": s.answers,
+            "details": s.details,
             "timestamp": _iso(s.timestamp), "source": s.source}
 
 

@@ -282,6 +282,11 @@ bool sendCase() {
   ans["others_present"]       = yesNo(answers[2] > 0);   // "How many people are with you?" (count > 0)
   ans["breathing_difficulty"] = yesNo(answers[3] == 1);  // "Is it hard to breathe?"
   ans["immediate_help"]       = yesNo(answers[4] == 1);  // "Do you need water or medication?" (closest match)
+  // The survivor's own answers, which the yes/no mapping above flattens (shown to responders).
+  JsonObject det = doc["details"].to<JsonObject>();
+  det["people_count"]              = answers[2] < 0 ? 0 : answers[2];
+  det["can_move"]                  = answers[1] == 1;
+  det["needs_water_or_medication"] = answers[4] == 1;
   return postJson("/api/surveys", doc);
 }
 
