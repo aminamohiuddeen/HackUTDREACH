@@ -6,6 +6,11 @@ Docs: http://localhost:8000/docs
 Data source labelling: every telemetry/survey record is tagged "simulator" or
 "hardware". The default is "simulator"; real hardware MUST opt in by sending
 the header `X-Reach-Source: hardware` or the query param `?source=hardware`.
+
+Auth: every rescue-data endpoint requires a Supabase access token
+(`Authorization: Bearer <jwt>`, verified in middleware/auth.py). Public:
+GET /health, /docs, and the device ingest endpoints POST /api/telemetry and
+POST /api/surveys (the ESP32 robot cannot log in).
 """
 from __future__ import annotations
 
@@ -26,6 +31,7 @@ import tools
 from agents.classifier import classify_case, survey_responded
 from agents.orchestrator import run_analysis
 from database import Base, SessionLocal, engine, get_db, utcnow
+from middleware.auth import verify_supabase_token
 from schemas import (
     CaseDetail,
     CaseOut,
@@ -219,6 +225,9 @@ def get_case_or_404(db: Session, case_id: int) -> models.Case:
     return case
 
 
+RequireUser = [Depends(verify_supabase_token)]
+
+
 # --- Endpoints ---------------------------------------------------------------
 
 @app.get("/health")
@@ -234,7 +243,7 @@ CONFIG_NOTE = (
 )
 
 
-@app.get("/api/config")
+@app.get("/api/config", dependencies=RequireUser)
 def get_config():
     """Read-only view of the responder thresholds the classifier uses."""
     return {
@@ -309,12 +318,12 @@ def post_survey(payload: SurveyIn, source: str = Depends(get_source),
                      case=case_out(case, ranks.get(case.id)))
 
 
-@app.get("/api/robots", response_model=list[RobotOut])
+@app.get("/api/robots", response_model=list[RobotOut], dependencies=RequireUser)
 def list_robots(db: Session = Depends(get_db)):
     return db.scalars(select(models.Robot).order_by(models.Robot.id)).all()
 
 
-@app.get("/api/cases", response_model=list[CaseOut])
+@app.get("/api/cases", response_model=list[CaseOut], dependencies=RequireUser)
 def list_cases(status: CaseStatus | None = None, sector: str | None = None,
                db: Session = Depends(get_db)):
     ranks = compute_ranks(db)
@@ -329,7 +338,7 @@ def list_cases(status: CaseStatus | None = None, sector: str | None = None,
     return [case_out(c, ranks.get(c.id)) for c in cases]
 
 
-@app.get("/api/cases/{case_id}", response_model=CaseDetail)
+@app.get("/api/cases/{case_id}", response_model=CaseDetail, dependencies=RequireUser)
 def get_case(case_id: int, db: Session = Depends(get_db)):
     case = get_case_or_404(db, case_id)
     ranks = compute_ranks(db)
@@ -341,7 +350,7 @@ def get_case(case_id: int, db: Session = Depends(get_db)):
     )
 
 
-@app.patch("/api/cases/{case_id}", response_model=CaseOut)
+@app.patch("/api/cases/{case_id}", response_model=CaseOut, dependencies=RequireUser)
 def patch_case(case_id: int, patch: CasePatch, db: Session = Depends(get_db)):
     case = get_case_or_404(db, case_id)
     changes = patch.model_dump(exclude_unset=True)
@@ -357,7 +366,7 @@ def patch_case(case_id: int, patch: CasePatch, db: Session = Depends(get_db)):
     return case_out(case, compute_ranks(db).get(case.id))
 
 
-@app.post("/api/cases/{case_id}/analyze")
+@app.post("/api/cases/{case_id}/analyze", dependencies=RequireUser)
 def analyze_case(case_id: int, db: Session = Depends(get_db)):
     """Run classifier + coordinator agents. Returns {report, tool_log, agent_counts, mode,
     truncated}; same shape in live and mock mode. Never assigns a unit."""
@@ -365,7 +374,7 @@ def analyze_case(case_id: int, db: Session = Depends(get_db)):
     return run_analysis(case_id, db)
 
 
-@app.get("/api/sectors", response_model=list[SectorStateOut])
+@app.get("/api/sectors", response_model=list[SectorStateOut], dependencies=RequireUser)
 def list_sectors(db: Session = Depends(get_db)):
     """Sectors with coverage state ("which sectors have not been searched?").
     Derived at request time from cases, robots and telemetry; nothing is stored."""
@@ -380,6 +389,6 @@ def list_sectors(db: Session = Depends(get_db)):
     return out
 
 
-@app.get("/api/units", response_model=list[UnitOut])
+@app.get("/api/units", response_model=list[UnitOut], dependencies=RequireUser)
 def list_units(db: Session = Depends(get_db)):
     return db.scalars(select(models.Unit).order_by(models.Unit.id)).all()
