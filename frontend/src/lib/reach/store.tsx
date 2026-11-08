@@ -18,6 +18,7 @@ type Action =
   | { type: "resolve"; caseId: string }
   | { type: "report"; caseId: string; report: NemotronReport }
   | { type: "load"; cases: RescueCase[] }
+  | { type: "refresh"; cases: RescueCase[] }
   | { type: "update_case_details"; caseId: string; details: Partial<RescueCase> };
 
 const OUTCOME_TITLE: Record<Exclude<VerificationOutcome, "pending">, string> = {
@@ -52,6 +53,51 @@ export function applyVerification(
   }
   return next;
 }
+
+/**
+ * Merge a fresh backend snapshot into the cases already on screen. The backend is the source
+ * for telemetry, classification and new cases; things only this session knows are kept:
+ * an analysis run here (GET /api/cases has no tool log), local timeline events, operator
+ * decisions (verify / resolve) and an operator-confirmed unit.
+ */
+export function mergeLiveCases(prev: RescueCase[], next: RescueCase[]): RescueCase[] {
+  const byId = new Map(prev.map((c) => [c.id, c]));
+  return next.map((n) => {
+    const p = byId.get(n.id);
+    if (!p) return n;
+    const operatorDecided = p.events.some((e) => e.actor === "operator");
+    const known = new Set(n.events.map((e) => e.id));
+    const merged: RescueCase = {
+      ...n,
+      report: p.report.tools.length > 0 && n.report.tools.length === 0 ? p.report : n.report,
+      events: [...n.events, ...p.events.filter((e) => !known.has(e.id))],
+      dispatchedUnit: p.dispatchedUnit ?? n.dispatchedUnit,
+    };
+    if (operatorDecided) {
+      merged.classification = p.classification;
+      merged.status = p.status;
+      merged.verification = p.verification;
+    }
+    return merged;
+  });
+}
+
+/** Live mode: every case, each enriched with its detail (sensors, questionnaire). */
+async function fetchLiveCases(): Promise<RescueCase[]> {
+  const cases = await reachApi.getCases();
+  // GET /api/cases omits telemetry/surveys; a failed detail falls back to the summary.
+  return Promise.all(
+    cases.map((c) =>
+      reachApi
+        .getCaseDetail(c.id)
+        .then((details) => ({ ...c, ...details }))
+        .catch(() => c),
+    ),
+  );
+}
+
+/** How often the dashboard re-fetches live cases (the hardware poller ingests every ~2 s). */
+export const LIVE_REFRESH_MS = 3000;
 
 function reducer(state: State, a: Action): State {
   switch (a.type) {
@@ -138,6 +184,9 @@ function reducer(state: State, a: Action): State {
     case "load":
       // Replace cases wholesale with live backend data; sectors/robots are left as-is.
       return { ...state, cases: a.cases };
+    case "refresh":
+      // Periodic live update: take the backend's latest, keep what this session did locally.
+      return { ...state, cases: mergeLiveCases(state.cases, a.cases) };
     case "update_case_details":
       // Merge detail-only fields (sensors, questionnaire, …) fetched from GET /api/cases/{id}.
       return {
@@ -163,28 +212,37 @@ export function ReachProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (DEMO_MODE) return;
     let cancelled = false;
-    reachApi
-      .getCases()
-      // GET /api/cases omits telemetry/surveys; fetch each case's detail in parallel so the
-      // dashboard, survivor list and case list are populated. A failed detail falls back to the summary.
-      .then((cases) =>
-        Promise.all(
-          cases.map((c) =>
-            reachApi
-              .getCaseDetail(c.id)
-              .then((details) => ({ ...c, ...details }))
-              .catch(() => c),
-          ),
-        ),
-      )
-      .then((cases) => {
-        if (!cancelled) dispatch({ type: "load", cases });
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) toast.error("Could not load cases", { description: e instanceof Error ? e.message : String(e) });
-      });
+    let inFlight = false;
+    let loaded = false;
+    let refreshFailing = false;
+
+    const tick = async () => {
+      // Skip if the previous fetch is still running or the tab is hidden.
+      if (inFlight || (loaded && typeof document !== "undefined" && document.hidden)) return;
+      inFlight = true;
+      try {
+        const cases = await fetchLiveCases();
+        if (cancelled) return;
+        dispatch({ type: loaded ? "refresh" : "load", cases });
+        loaded = true;
+        refreshFailing = false;
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const description = e instanceof Error ? e.message : String(e);
+        // First load failing is worth a toast; a failing background refresh only once.
+        if (!loaded) toast.error("Could not load cases", { description });
+        else if (!refreshFailing) toast.warning("Live updates paused", { description });
+        refreshFailing = loaded;
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void tick();
+    const timer = setInterval(() => void tick(), LIVE_REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, []);
   const value = useMemo(() => ({ ...state, dispatch }), [state]);

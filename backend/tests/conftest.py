@@ -1,6 +1,7 @@
 import os
 
 os.environ["DATABASE_URL"] = "sqlite://"  # in-memory; must be set before importing the app
+os.environ["HARDWARE_SYNC_INTERVAL"] = "0"  # never poll the real pod server from tests
 
 import pytest
 from fastapi.testclient import TestClient

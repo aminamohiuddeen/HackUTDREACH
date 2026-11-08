@@ -14,11 +14,13 @@ POST /api/surveys (the ESP32 robot cannot log in).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import random
 import sys
-from contextlib import asynccontextmanager
+import threading
+from contextlib import asynccontextmanager, suppress
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -93,7 +95,17 @@ def init_db(db: Session) -> None:
 async def lifespan(app: FastAPI):
     with SessionLocal() as db:
         init_db(db)
+    poller = None
+    interval = hardware_sync_interval()
+    if interval > 0:
+        print(f"hardware sync: polling {hardware_sync.STATE_URL} every {interval:g}s",
+              file=sys.stderr)
+        poller = asyncio.create_task(hardware_poll_loop(interval))
     yield
+    if poller is not None:
+        poller.cancel()
+        with suppress(asyncio.CancelledError):
+            await poller
 
 
 class UTF8JSONResponse(JSONResponse):
@@ -356,12 +368,18 @@ def list_cases(status: CaseStatus | None = None, sector: str | None = None,
 
 
 @app.get("/api/cases/{case_id}", response_model=CaseDetail, dependencies=RequireUser)
-def get_case(case_id: int, db: Session = Depends(get_db)):
+def get_case(case_id: int, db: Session = Depends(get_db),
+             telemetry_limit: int | None = Query(
+                 None, ge=1, description="Return only the most recent N telemetry rows "
+                                         "(a live hardware case gains one every few seconds)")):
     case = get_case_or_404(db, case_id)
     ranks = compute_ranks(db)
+    rows = list(case.telemetry)
+    if telemetry_limit is not None:
+        rows = rows[-telemetry_limit:]
     return case_out(
         case, ranks.get(case.id), cls=CaseDetail,
-        telemetry=[telemetry_out(t) for t in case.telemetry],
+        telemetry=[telemetry_out(t) for t in rows],
         surveys=[SurveyOut.model_validate(s) for s in case.surveys],
         latest_report=latest_report_out(db, case.id),
     )
@@ -416,59 +434,98 @@ def list_units(db: Session = Depends(get_db)):
 # Entries already ingested ("t:<unit>:<received_at>" / "s:<case_id>:<received_at>").
 # In-memory: after a restart the pod server's latest entries are ingested once more.
 _hardware_seen: set[str] = set()
+# One sync at a time: the background poller and GET /api/sync-hardware share _hardware_seen.
+_hardware_lock = threading.Lock()
+
+
+def ingest_hardware_state(state: dict, db: Session) -> dict:
+    """Ingest a pod server /state snapshot as source=hardware telemetry and surveys.
+    Readings the pod cannot provide are simulated and listed in `simulated_fields`;
+    entries already ingested are skipped."""
+    out = {"telemetry_ingested": 0, "surveys_ingested": 0, "skipped_duplicates": 0,
+           "case_ids": [], "simulated_fields": {}, "errors": []}
+    rng = random.Random()
+    with _hardware_lock:
+        telemetry = state.get("latest_telemetry")
+        for unit_id, data in (telemetry.items() if isinstance(telemetry, dict) else []):
+            if not isinstance(data, dict):
+                continue
+            key = f"t:{unit_id}:{data.get('received_at')}"
+            if key in _hardware_seen:
+                out["skipped_duplicates"] += 1
+                continue
+            try:
+                payload, simulated = hardware_sync.pod_telemetry(str(unit_id), data, rng)
+            except ValidationError as e:
+                out["errors"].append(f"telemetry {unit_id}: {e.errors()[0]['msg']}")
+                continue
+            ack = post_telemetry(payload, source="hardware", db=db)
+            _hardware_seen.add(key)
+            out["telemetry_ingested"] += 1
+            out["simulated_fields"][payload.robot_id] = simulated
+            if ack.case_id not in out["case_ids"]:
+                out["case_ids"].append(ack.case_id)
+
+        cases = state.get("cases")
+        for case in (cases if isinstance(cases, list) else []):
+            if not isinstance(case, dict):
+                continue
+            key = f"s:{case.get('case_id')}:{case.get('received_at')}"
+            if key in _hardware_seen:
+                out["skipped_duplicates"] += 1
+                continue
+            try:
+                payload = hardware_sync.pod_survey(case)
+            except ValidationError as e:
+                out["errors"].append(f"survey {case.get('case_id')}: {e.errors()[0]['msg']}")
+                continue
+            ack = post_survey(payload, source="hardware", db=db)
+            _hardware_seen.add(key)
+            out["surveys_ingested"] += 1
+            if ack.case_id not in out["case_ids"]:
+                out["case_ids"].append(ack.case_id)
+    return out
 
 
 @app.get("/api/sync-hardware", dependencies=RequireUser)
 def sync_hardware(db: Session = Depends(get_db)):
-    """Pull the rescue pod's latest data from the hardware test server (/state) and ingest it as
-    source=hardware telemetry and surveys. Readings the pod cannot provide are simulated and
-    listed in `simulated_fields`. Safe to call repeatedly: already-ingested entries are skipped."""
+    """Pull the rescue pod's latest data from the hardware test server (/state) now.
+    The background poller (HARDWARE_SYNC_INTERVAL) does the same thing on a timer."""
     try:
         state = hardware_sync.fetch_state()
     except (httpx.HTTPError, ValueError) as e:
         raise HTTPException(status_code=502, detail=f"Hardware server unreachable: {e}")
+    return ingest_hardware_state(state, db)
 
-    rng = random.Random()
-    out = {"telemetry_ingested": 0, "surveys_ingested": 0, "skipped_duplicates": 0,
-           "case_ids": [], "simulated_fields": {}, "errors": []}
 
-    telemetry = state.get("latest_telemetry")
-    for unit_id, data in (telemetry.items() if isinstance(telemetry, dict) else []):
-        if not isinstance(data, dict):
-            continue
-        key = f"t:{unit_id}:{data.get('received_at')}"
-        if key in _hardware_seen:
-            out["skipped_duplicates"] += 1
-            continue
+def hardware_sync_once() -> dict:
+    """One poll: fetch the pod server's /state and ingest it in a fresh session."""
+    state = hardware_sync.fetch_state()
+    with SessionLocal() as db:
+        return ingest_hardware_state(state, db)
+
+
+def hardware_sync_interval() -> float:
+    """Seconds between background polls; 0 / unset / invalid disables the poller."""
+    try:
+        return max(0.0, float(os.getenv("HARDWARE_SYNC_INTERVAL", "0") or 0))
+    except ValueError:
+        return 0.0
+
+
+async def hardware_poll_loop(interval: float) -> None:
+    """Keep the hardware case live. Failures are logged once (not every tick) and never stop
+    the server; the loop recovers on its own when the pod server comes back."""
+    failing = False
+    while True:
         try:
-            payload, simulated = hardware_sync.pod_telemetry(str(unit_id), data, rng)
-        except ValidationError as e:
-            out["errors"].append(f"telemetry {unit_id}: {e.errors()[0]['msg']}")
-            continue
-        ack = post_telemetry(payload, source="hardware", db=db)
-        _hardware_seen.add(key)
-        out["telemetry_ingested"] += 1
-        out["simulated_fields"][payload.robot_id] = simulated
-        if ack.case_id not in out["case_ids"]:
-            out["case_ids"].append(ack.case_id)
-
-    cases = state.get("cases")
-    for case in (cases if isinstance(cases, list) else []):
-        if not isinstance(case, dict):
-            continue
-        key = f"s:{case.get('case_id')}:{case.get('received_at')}"
-        if key in _hardware_seen:
-            out["skipped_duplicates"] += 1
-            continue
-        try:
-            payload = hardware_sync.pod_survey(case)
-        except ValidationError as e:
-            out["errors"].append(f"survey {case.get('case_id')}: {e.errors()[0]['msg']}")
-            continue
-        ack = post_survey(payload, source="hardware", db=db)
-        _hardware_seen.add(key)
-        out["surveys_ingested"] += 1
-        if ack.case_id not in out["case_ids"]:
-            out["case_ids"].append(ack.case_id)
-
-    return out
+            await asyncio.to_thread(hardware_sync_once)
+            if failing:
+                print("hardware sync: recovered", file=sys.stderr)
+                failing = False
+        except Exception as e:  # noqa: BLE001 - the pod must never take the API down
+            if not failing:
+                print(f"hardware sync: failing ({type(e).__name__}: {e}); retrying every "
+                      f"{interval:g}s", file=sys.stderr)
+                failing = True
+        await asyncio.sleep(interval)

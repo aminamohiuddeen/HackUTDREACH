@@ -76,12 +76,15 @@ def pod_telemetry(unit_id: str, data: dict, rng: random.Random) -> tuple[Telemet
         gyro = dict(STILL_GYRO)
         simulated.append("gyroscope")
     # No GPS or zone knowledge on the pod.
-    location = {"lat": round(BASE_LAT + rng.uniform(-0.0005, 0.0005), 6),
-                "lng": round(BASE_LNG + rng.uniform(-0.0005, 0.0005), 6), "source": "gps"}
+    # Stable per robot (seeded by its id) so a live case does not wander on every poll.
+    robot_id = str(data.get("unit_id") or unit_id)
+    fix = random.Random(robot_id)
+    location = {"lat": round(BASE_LAT + fix.uniform(-0.0005, 0.0005), 6),
+                "lng": round(BASE_LNG + fix.uniform(-0.0005, 0.0005), 6), "source": "gps"}
     simulated += ["location", "location_zone"]
 
     payload = TelemetryIn(
-        robot_id=str(data.get("unit_id") or unit_id),
+        robot_id=robot_id,
         sector=SECTOR,
         location=location,
         temperature_c=temp,

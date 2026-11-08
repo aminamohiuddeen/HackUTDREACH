@@ -302,7 +302,8 @@ export const reachApi = {
     if (DEMO_MODE) return {}; // mock cases already carry full details
     const backendId = Number(id.replace(/^RC-1107-/, ""));
     if (!Number.isFinite(backendId)) return {};
-    const raw = (await getJson(`/api/cases/${backendId}`)) as BackendCase;
+    // Only the latest telemetry row is shown; a live hardware case gains one every few seconds.
+    const raw = (await getJson(`/api/cases/${backendId}?telemetry_limit=1`)) as BackendCase;
     return adaptTelemetryFields(raw);
   },
   async analyzeCase(id: string, current: NemotronReport): Promise<NemotronReport> {
