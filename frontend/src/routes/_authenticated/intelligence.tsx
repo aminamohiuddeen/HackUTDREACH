@@ -33,8 +33,17 @@ function Intelligence() {
   const { cases, dispatch } = useReach();
   const { id } = Route.useSearch();
   const navigate = useNavigate({ from: "/intelligence" });
-  const c = cases.find((x) => x.id === id) ?? cases[0]!;
+  const c = cases.find((x) => x.id === id) ?? cases[0];
   const [busy, setBusy] = useState<string | null>(null);
+
+  if (!c) {
+    return (
+      <div>
+        <PageHeader title="Nemotron Mission Intelligence" description="AI-organized rescue reports for operator review. Nemotron summarizes and retrieves context; it never selects, assigns, or dispatches units." />
+        <Panel><p className="px-5 py-6 text-center text-sm text-muted-foreground">No cases loaded yet.</p></Panel>
+      </div>
+    );
+  }
 
   const analyze = async () => {
     setBusy(c.id);
@@ -118,6 +127,11 @@ function Intelligence() {
           <Panel>
             <PanelHeader title="Tool execution timeline" icon={Wrench} meta={`${c.report.tools.length} calls`} />
             <ol className="divide-y">
+              {c.report.tools.length === 0 && !busy && (
+                <li className="px-5 py-6 text-center text-sm text-muted-foreground">
+                  No analysis yet — click "Re-run analysis" to invoke Nemotron.
+                </li>
+              )}
               {c.report.tools.map((t, i) => {
                 const Icon = TOOL_ICON[t.status];
                 return (
