@@ -10,7 +10,7 @@ describe("future FastAPI authenticated requests", () => {
     session.mockResolvedValue({ data: { session: { access_token: "unit-test-token" } }, error: null });
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => [] }); vi.stubGlobal("fetch", fetcher);
     const { reachApi } = await import("./api");
-    await expect(reachApi.getCases()).rejects.toThrow("mapping pending");
+    await expect(reachApi.getCases()).resolves.toEqual([]);
     expect(fetcher).toHaveBeenCalledOnce();
     expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("Authorization")).toBe("Bearer unit-test-token");
   });
